@@ -45,9 +45,7 @@ class InnerProductAndDropoutLayer : public Layer<Dtype, MItype, MOtype> {
   virtual void Backward_gpu(const vector<Blob<MOtype>*>& top,
       const vector<bool>& propagate_down,
       const vector<Blob<MItype>*>& bottom);
-
-  ///GenerateProgram is a memeber function of Dropout Layer
-  virtual void GenerateProgram();
+  ///GenerateProgram is a memeber function of Dropout Layer. It is not needed here, I think
 
   int_tp M_;
   int_tp K_;
