@@ -688,6 +688,31 @@ void LibDNNBlas<MItype, MOtype>::gemm(
   kernel->Execute(group, local);
 }
 
+
+template<typename MItype, typename MOtype>
+void LibDNNBlas<MItype, MOtype>::gemm_dropout(
+               const CBLAS_TRANSPOSE trans_A, const CBLAS_TRANSPOSE trans_B,
+               const uint_tp M, const uint_tp N, const uint_tp K,
+               const MOtype alpha, vptr<const MItype> A, vptr<const MItype> B,
+               const MOtype beta, vptr<MOtype> C,
+	       vptr<const uint8_t> dropout, float scale,
+               const QuantizerValues* const alpha_quant,
+               const QuantizerValues* const a_quant,
+               const QuantizerValues* const b_quant,
+               const QuantizerValues* const beta_quant,
+               const QuantizerValues* const c_quant) {
+
+  typedef typename std::conditional<float_is_same<MItype>::value, MItype,
+          typename std::conditional<sizeof(MItype) == 1, int16_t,
+          typename std::conditional<sizeof(MItype) == 2, int32_t,
+                                    int64_t>::type>::type>::type Difftype;
+  typedef typename std::conditional<float_is_same<MItype>::value, MItype,
+          typename std::conditional<sizeof(MItype) == 1, int32_t,
+                                    int64_t>::type>::type Acctype;
+  NOT_IMPLEMENTED;
+}
+
+
 INSTANTIATE_CLASS_2T_GUARDED(LibDNNBlas, PROTO_TYPES, PROTO_TYPES);
 
 }  // namespace caffe

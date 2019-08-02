@@ -8,6 +8,9 @@
 
 namespace caffe {
 
+///Billy: verbose implementation to assign the gemm with different data types
+///May and may not be updated for further optimization
+
 template<typename Dtype>
 void Device::copy(const uint_tp n, vptr<const Dtype> x, vptr<Dtype> y) {
   this->memcpy(safe_sizeof<Dtype>() * n, x, y);
@@ -135,6 +138,21 @@ void Device::gemv(const CBLAS_TRANSPOSE trans_a, const uint_tp m,
                   alpha_quant, a_quant, x_quant, beta_quant, y_quant);
 }
 template<>
+void Device::gemm_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE trans_b,
+                  const uint_tp m, const uint_tp n, const uint_tp k,
+                  const half_fp alpha, vptr<const half_fp> a,
+                  vptr<const half_fp> b,
+                  const half_fp beta, vptr<half_fp> c,
+		  vptr<const uint8_t> dropout, float scale,
+                  const QuantizerValues* const alpha_quant,
+                  const QuantizerValues* const a_quant,
+                  const QuantizerValues* const b_quant,
+                  const QuantizerValues* const beta_quant,
+                  const QuantizerValues* const c_quant) {
+  this->gemm_half_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale,
+                  alpha_quant, a_quant, b_quant, beta_quant, c_quant);
+}
+template<>
 void Device::axpy(const uint_tp n, const half_fp alpha,
                   vptr<const half_fp> x, vptr<half_fp> y,
                   const QuantizerValues* const alpha_quant,
@@ -204,6 +222,21 @@ void Device::gemv(const CBLAS_TRANSPOSE trans_a, const uint_tp m,
                    alpha_quant, a_quant, x_quant, beta_quant, y_quant);
 }
 template<>
+void Device::gemm_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE trans_b,
+                  const uint_tp m, const uint_tp n, const uint_tp k,
+                  const float alpha, vptr<const float> a,
+                  vptr<const float> b,
+                  const float beta, vptr<float> c,
+		  vptr<const uint8_t> dropout, float scale,
+                  const QuantizerValues* const alpha_quant,
+                  const QuantizerValues* const a_quant,
+                  const QuantizerValues* const b_quant,
+                  const QuantizerValues* const beta_quant,
+                  const QuantizerValues* const c_quant) {
+  this->gemm_float_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale,
+                  alpha_quant, a_quant, b_quant, beta_quant, c_quant);
+}
+template<>
 void Device::axpy(const uint_tp n, const float alpha,
                   vptr<const float> x, vptr<float> y,
                   const QuantizerValues* const alpha_quant,
@@ -268,6 +301,20 @@ void Device::gemv(const CBLAS_TRANSPOSE trans_a, const uint_tp m,
                   const QuantizerValues* const y_quant) {
   this->gemv_double(trans_a, m, n, alpha, a, x, beta, y,
                     alpha_quant, a_quant, x_quant, beta_quant, y_quant);
+}
+template<>
+void Device::gemm_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE trans_b,
+                  const uint_tp m, const uint_tp n, const uint_tp k,
+                  const double alpha, vptr<const double> a,
+                  vptr<const double> b, const double beta, vptr<double> c,
+		  vptr<const uint8_t> dropout, float scale,
+                  const QuantizerValues* const alpha_quant,
+                  const QuantizerValues* const a_quant,
+                  const QuantizerValues* const b_quant,
+                  const QuantizerValues* const beta_quant,
+                  const QuantizerValues* const c_quant) {
+  this->gemm_double_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale,
+                    alpha_quant, a_quant, b_quant, beta_quant, c_quant);
 }
 template<>
 void Device::axpy(const uint_tp n, const double alpha,
@@ -335,6 +382,20 @@ void Device::gemv(const CBLAS_TRANSPOSE trans_a, const uint_tp m,
                   const QuantizerValues* const y_quant) {
   this->gemv_uint8(trans_a, m, n, alpha, a, x, beta, y,
                    alpha_quant, a_quant, x_quant, beta_quant, y_quant);
+}
+template<>
+void Device::gemm_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE trans_b,
+                  const uint_tp m, const uint_tp n, const uint_tp k,
+                  const uint8_t alpha, vptr<const uint8_t> a,
+                  vptr<const uint8_t> b, const uint8_t beta, vptr<uint8_t> c,
+		  vptr<const uint8_t> dropout, float scale,
+                  const QuantizerValues* const alpha_quant,
+                  const QuantizerValues* const a_quant,
+                  const QuantizerValues* const b_quant,
+                  const QuantizerValues* const beta_quant,
+                  const QuantizerValues* const c_quant) {
+  this->gemm_uint8_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale,
+                   alpha_quant, a_quant, b_quant, beta_quant, c_quant);
 }
 template<>
 void Device::axpy(const uint_tp n, const uint8_t alpha,
@@ -405,6 +466,21 @@ void Device::gemv(const CBLAS_TRANSPOSE trans_a, const uint_tp m,
                     alpha_quant, a_quant, x_quant, beta_quant, y_quant);
 }
 template<>
+void Device::gemm_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE trans_b,
+                  const uint_tp m, const uint_tp n, const uint_tp k,
+                  const uint16_t alpha, vptr<const uint16_t> a,
+                  vptr<const uint16_t> b, const uint16_t beta,
+                  vptr<uint16_t> c,
+		  vptr<const uint8_t> dropout, float scale,
+                  const QuantizerValues* const alpha_quant,
+                  const QuantizerValues* const a_quant,
+                  const QuantizerValues* const b_quant,
+                  const QuantizerValues* const beta_quant,
+                  const QuantizerValues* const c_quant) {
+  this->gemm_uint16_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale,
+                    alpha_quant, a_quant, b_quant, beta_quant, c_quant);
+}
+template<>
 void Device::axpy(const uint_tp n, const uint16_t alpha,
                   vptr<const uint16_t> x, vptr<uint16_t> y,
                   const QuantizerValues* const alpha_quant,
@@ -473,6 +549,21 @@ void Device::gemv(const CBLAS_TRANSPOSE trans_a, const uint_tp m,
                     alpha_quant, a_quant, x_quant, beta_quant, y_quant);
 }
 template<>
+void Device::gemm_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE trans_b,
+                  const uint_tp m, const uint_tp n, const uint_tp k,
+                  const uint32_t alpha, vptr<const uint32_t> a,
+                  vptr<const uint32_t> b, const uint32_t beta,
+                  vptr<uint32_t> c,
+		  vptr<const uint8_t> dropout, float scale,
+                  const QuantizerValues* const alpha_quant,
+                  const QuantizerValues* const a_quant,
+                  const QuantizerValues* const b_quant,
+                  const QuantizerValues* const beta_quant,
+                  const QuantizerValues* const c_quant) {
+  this->gemm_uint32_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale,
+                    alpha_quant, a_quant, b_quant, beta_quant, c_quant);
+}
+template<>
 void Device::axpy(const uint_tp n, const uint32_t alpha,
                   vptr<const uint32_t> x, vptr<uint32_t> y,
                   const QuantizerValues* const alpha_quant,
@@ -539,6 +630,21 @@ void Device::gemv(const CBLAS_TRANSPOSE trans_a, const uint_tp m,
                   const QuantizerValues* const y_quant) {
   this->gemv_uint64(trans_a, m, n, alpha, a, x, beta, y,
                     alpha_quant, a_quant, x_quant, beta_quant, y_quant);
+}
+template<>
+void Device::gemm_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE trans_b,
+                  const uint_tp m, const uint_tp n, const uint_tp k,
+                  const uint64_t alpha, vptr<const uint64_t> a,
+                  vptr<const uint64_t> b, const uint64_t beta,
+                  vptr<uint64_t> c,
+		  vptr<const uint8_t> dropout, float scale,
+                  const QuantizerValues* const alpha_quant,
+                  const QuantizerValues* const a_quant,
+                  const QuantizerValues* const b_quant,
+                  const QuantizerValues* const beta_quant,
+                  const QuantizerValues* const c_quant) {
+  this->gemm_uint64_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale,
+                    alpha_quant, a_quant, b_quant, beta_quant, c_quant);
 }
 template<>
 void Device::axpy(const uint_tp n, const uint64_t alpha,

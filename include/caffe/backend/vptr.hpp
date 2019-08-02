@@ -8,6 +8,7 @@
 #include "caffe/util/half_fp.hpp"
 
 namespace caffe {
+//TODO What is vptr? It seems to be a wrapper of dev_ptr
 
 template<typename Dtype, typename = void>
 class vptr {

@@ -64,6 +64,16 @@ class LibDNNBlas : public LibDNN<MItype, MOtype> {
             const QuantizerValues* const beta_quant = nullptr,
             const QuantizerValues* const c_quant = nullptr);
 
+  void gemm_dropout(const CBLAS_TRANSPOSE trans_A, const CBLAS_TRANSPOSE trans_B,
+            const uint_tp M, const uint_tp N, const uint_tp K,
+            const MOtype alpha, vptr<const MItype> A, vptr<const MItype> B,
+            const MOtype beta, vptr<MOtype> C, vptr<const uint8_t> dropout, float scale,
+            const QuantizerValues* const alpha_quant = nullptr,
+            const QuantizerValues* const a_quant = nullptr,
+            const QuantizerValues* const b_quant = nullptr,
+            const QuantizerValues* const beta_quant = nullptr,
+            const QuantizerValues* const c_quant = nullptr);
+
  private:
   /*The same string_identifier means the same DeviceProgram, and this map mechanism reduces the time cost to CreateProgram*/
   int_tp get_id(string identifier);

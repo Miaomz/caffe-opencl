@@ -146,7 +146,7 @@ void OclDevice::gemm_float(const CBLAS_TRANSPOSE trans_A,
 #else  // default (ViennaCL)
   Device::gemm_float(trans_A, trans_B, M, N, K, alpha, A, B, beta, C,
                     alpha_quant, a_quant, b_quant, beta_quant, c_quant);
-//billy: comment the viennaCL code below and replace it with libdnn_blas, otherwise this task will be too hard 
+//Billy: comment the viennaCL code below and replace it with libdnn_blas, otherwise this task will be too hard 
 /*
     typedef typename viennacl::matrix_base<float,
         uint_tp, int_tp>::size_type size_type;

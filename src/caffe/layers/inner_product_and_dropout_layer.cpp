@@ -10,7 +10,7 @@ template<typename Dtype, typename MItype, typename MOtype>
 void InnerProductAndDropoutLayer<Dtype, MItype, MOtype>::LayerSetUp(
     const vector<Blob<MItype>*>& bottom,
     const vector<Blob<MOtype>*>& top) {
-  //billy: initialize by inner_product_and_dropout_param(), which is created by protobuf
+  //Billy: initialize by inner_product_and_dropout_param(), which is created by protobuf
   const int_tp num_output =
       this->layer_param_.inner_product_and_dropout_param().num_output();
   bias_term_ = this->layer_param_.inner_product_and_dropout_param().bias_term();
@@ -60,6 +60,12 @@ void InnerProductAndDropoutLayer<Dtype, MItype, MOtype>::LayerSetUp(
   }  // parameter initialization
   this->param_propagate_down_.resize(this->blobs_.size(), true);
 
+  //Dropout part is as follows
+  threshold_ = this->layer_param_.inner_product_and_dropout_param().dropout_ratio();
+  DCHECK(threshold_ > 0.);
+  DCHECK(threshold_ < 1.);
+  scale_ = 1. / (1. - threshold_);
+
   this->InitializeQuantizers(bottom, top);
 }
 
@@ -93,6 +99,10 @@ void InnerProductAndDropoutLayer<Dtype, MItype, MOtype>::Reshape(
     bias_multiplier_qv_.min = 0.0;
     caffe_set(M_, Dtype(1), bias_multiplier_.mutable_cpu_data());
   }
+
+  // Dropout part below. Set up the cache for random number generation
+  // ReshapeLike does not work because rand_vec_ is of Dtype uint
+  rand_vec_.Reshape(bottom[0]->shape());
 }
 
 template<typename Dtype, typename MItype, typename MOtype>
@@ -116,6 +126,17 @@ void InnerProductAndDropoutLayer<Dtype, MItype, MOtype>::Forward_cpu(
                       nullptr, &bias_multiplier_qv_,
                       &(this->blobs_quants_[1]->out_quantizer_values()),
                       nullptr, &(this->top_quants_[0]->in_quantizer_values()));
+  }
+
+  //TODO fully implement ForwardCPU with optimized Dropout later
+  uint8_t* mask = rand_vec_.mutable_cpu_data();
+  const int_tp count = bottom[0]->count();
+  if (this->phase_ == TRAIN) {
+    // Create random numbers, but kind of wastes the memory space of mask for it is uint8_t
+    caffe_rng_bernoulli(count, 1. - threshold_, mask);
+    for (int_tp i = 0; i < count; ++i) {
+      top_data[i] = top_data[i] * mask[i] * scale_;
+    }
   }
 }
 
@@ -146,19 +167,33 @@ void InnerProductAndDropoutLayer<Dtype, MItype, MOtype>::Backward_cpu(
                           bias_multiplier_.cpu_data(), (Dtype) 1.,
                           this->blobs_[1]->mutable_cpu_diff());
   }
+
   if (propagate_down[0]) {
     const Dtype* top_diff = top[0]->cpu_diff();
+    Dtype* bottom_diff = bottom[0]->mutable_cpu_diff();
+ 
     // Gradient with respect to bottom data
     if (transpose_) {
       caffe_gemm<Dtype>(CblasNoTrans, CblasTrans,
           M_, K_, N_,
           (Dtype)1., top_diff, this->blobs_[0]->cpu_data(),
-          (Dtype)0., bottom[0]->mutable_cpu_diff());
+          (Dtype)0., bottom_diff);
     } else {
       caffe_gemm<Dtype>(CblasNoTrans, CblasNoTrans,
           M_, K_, N_,
           (Dtype)1., top_diff, this->blobs_[0]->cpu_data(),
-          (Dtype)0., bottom[0]->mutable_cpu_diff());
+          (Dtype)0., bottom_diff);
+    }
+ 
+    //TODO fully implement ForwardCPU with optimized Dropout later
+    //Interestingly, param_propagate_down is not included in Dropout.
+    //Guess that is because Dropout has no trainable parameters.
+    if (this->phase_ == TRAIN) {
+      const uint8_t* mask = rand_vec_.cpu_data();
+      const int_tp count = bottom[0]->count();
+      for (int_tp i = 0; i < count; ++i) {
+        bottom_diff[i] = bottom_diff[i] * mask[i] * scale_;
+      }
     }
   }
 }

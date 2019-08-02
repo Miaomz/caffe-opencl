@@ -23,8 +23,7 @@ class dev_ptr<Dtype, typename non_const_enable_if<Dtype>::type> {
   virtual shared_ptr<dev_ptr<uint16_t> > instance(uint16_t* dummy) = 0;
   virtual shared_ptr<dev_ptr<uint32_t> > instance(uint32_t* dummy) = 0;
   virtual shared_ptr<dev_ptr<uint64_t> > instance(uint64_t* dummy) = 0;
-  virtual shared_ptr<dev_ptr<half_fp> >
-                                          instance(half_fp* dummy) = 0;
+  virtual shared_ptr<dev_ptr<half_fp> > instance(half_fp* dummy) = 0;
   virtual shared_ptr<dev_ptr<float> > instance(float* dummy) = 0;
   virtual shared_ptr<dev_ptr<double> > instance(double* dummy) = 0;
   virtual shared_ptr<dev_ptr<void> > instance(void* dummy) = 0;

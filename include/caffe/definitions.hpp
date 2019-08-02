@@ -26,7 +26,7 @@
 #include "caffe/util/half_fp.hpp"
 #include "caffe/util/inline_math.hpp"
 
-
+//'tp' means 64 or 32 bit, and related to INDEX
 #ifdef USE_INDEX_64
 // Types used for parameters, offset computations and so on
 #define int_tp int64_t

@@ -196,6 +196,21 @@ class Device {
             const QuantizerValues* const beta_quant = nullptr,
             const QuantizerValues* const y_quant = nullptr);
 
+  /*Billy: Dropout applied here and other functions below for each data type */
+  template<typename Dtype>
+  void gemm_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE trans_b,
+            const uint_tp m, const uint_tp n, const uint_tp k,
+            const Dtype alpha, vptr<const Dtype> a,
+            vptr<const Dtype> b,
+            const Dtype beta, vptr<Dtype> c,
+//TODO temporarily use uint8_t, there must be a more efficient way, e.g. image in image memory or bitmap in constant memory
+	    vptr<const uint8_t> dropout, float scale,
+            const QuantizerValues* const alpha_quant = nullptr,
+            const QuantizerValues* const a_quant = nullptr,
+            const QuantizerValues* const b_quant = nullptr,
+            const QuantizerValues* const beta_quant = nullptr,
+            const QuantizerValues* const c_quant = nullptr);
+
   template<typename Dtype>
   void axpy(const uint_tp n, const Dtype alpha, vptr<const Dtype> x,
             vptr<Dtype> y,
@@ -335,7 +350,18 @@ class Device {
                  const QuantizerValues* const a_quant = nullptr,
                  const QuantizerValues* const x_quant = nullptr,
                  const QuantizerValues* const beta_quant = nullptr,
-                 const QuantizerValues* const y_quant = nullptr);
+                 const QuantizerValues* const y_quant = nullptr); 
+  virtual void gemm_half_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE trans_b,
+		 const uint_tp m, const uint_tp n, const uint_tp k,
+            	 const half_fp alpha, vptr<const half_fp> a,
+            	 vptr<const half_fp> b,
+            	 const half_fp beta, vptr<half_fp> c,
+	    	 vptr<const uint8_t> dropout, float scale,
+             	 const QuantizerValues* const alpha_quant = nullptr,
+            	 const QuantizerValues* const a_quant = nullptr,
+            	 const QuantizerValues* const b_quant = nullptr,
+            	 const QuantizerValues* const beta_quant = nullptr,
+            	 const QuantizerValues* const c_quant = nullptr);
   virtual void axpy_half(const uint_tp n,
                          const half_fp alpha,
                          vptr<const half_fp> x,
@@ -401,6 +427,17 @@ class Device {
                  const QuantizerValues* const x_quant = nullptr,
                  const QuantizerValues* const beta_quant = nullptr,
                  const QuantizerValues* const y_quant = nullptr);
+  virtual void gemm_float_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE trans_b,
+            	 const uint_tp m, const uint_tp n, const uint_tp k,
+            	 const float alpha, vptr<const float> a,
+            	 vptr<const float> b,
+            	 const float beta, vptr<float> c,
+	    	 vptr<const uint8_t> dropout, float scale,
+            	 const QuantizerValues* const alpha_quant = nullptr,
+            	 const QuantizerValues* const a_quant = nullptr,
+            	 const QuantizerValues* const b_quant = nullptr,
+            	 const QuantizerValues* const beta_quant = nullptr,
+            	 const QuantizerValues* const c_quant = nullptr);
   virtual void axpy_float(const uint_tp n, const float alpha,
                           vptr<const float> x, vptr<float> y,
                           const QuantizerValues* const alpha_quant = nullptr,
@@ -464,6 +501,17 @@ class Device {
                  const QuantizerValues* const x_quant = nullptr,
                  const QuantizerValues* const beta_quant = nullptr,
                  const QuantizerValues* const y_quant = nullptr);
+  virtual void gemm_double_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE trans_b,
+            	 const uint_tp m, const uint_tp n, const uint_tp k,
+            	 const double alpha, vptr<const double> a,
+            	 vptr<const double> b,
+            	 const double beta, vptr<double> c,
+	    	 vptr<const uint8_t> dropout, float scale,
+            	 const QuantizerValues* const alpha_quant = nullptr,
+            	 const QuantizerValues* const a_quant = nullptr,
+            	 const QuantizerValues* const b_quant = nullptr,
+            	 const QuantizerValues* const beta_quant = nullptr,
+            	 const QuantizerValues* const c_quant = nullptr);
   virtual void axpy_double(const uint_tp n, const double alpha,
                           vptr<const double> x, vptr<double> y);
   virtual void axpby_double(const uint_tp n, const double alpha,
@@ -522,6 +570,19 @@ class Device {
                  const QuantizerValues* const x_quant = nullptr,
                  const QuantizerValues* const beta_quant = nullptr,
                  const QuantizerValues* const y_quant = nullptr);
+  virtual void gemm_uint8_dropout
+                (const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE trans_b,
+                 const uint_tp m, const uint_tp n, const uint_tp k,
+                 const uint8_t alpha, vptr<const uint8_t> a,
+                 vptr<const uint8_t> b,
+                 const uint8_t beta,
+                 vptr<uint8_t> c,
+		 vptr<const uint8_t> dropout, float scale,
+                 const QuantizerValues* const alpha_quant = nullptr,
+                 const QuantizerValues* const a_quant = nullptr,
+                 const QuantizerValues* const b_quant = nullptr,
+                 const QuantizerValues* const beta_quant = nullptr,
+                 const QuantizerValues* const c_quant = nullptr);
   virtual void axpy_uint8(const uint_tp n,
                          const uint8_t alpha,
                          vptr<const uint8_t> x,
@@ -570,6 +631,19 @@ class Device {
                  const QuantizerValues* const x_quant = nullptr,
                  const QuantizerValues* const beta_quant = nullptr,
                  const QuantizerValues* const y_quant = nullptr);
+  virtual void gemm_uint16_dropout
+                (const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE trans_b,
+                 const uint_tp m, const uint_tp n, const uint_tp k,
+                 const uint16_t alpha, vptr<const uint16_t> a,
+                 vptr<const uint16_t> b,
+                 const uint16_t beta,
+                 vptr<uint16_t> c,
+		 vptr<const uint8_t> dropout, float scale,
+                 const QuantizerValues* const alpha_quant = nullptr,
+                 const QuantizerValues* const a_quant = nullptr,
+                 const QuantizerValues* const b_quant = nullptr,
+                 const QuantizerValues* const beta_quant = nullptr,
+                 const QuantizerValues* const c_quant = nullptr);
   virtual void axpy_uint16(const uint_tp n,
                          const uint16_t alpha,
                          vptr<const uint16_t> x,
@@ -619,6 +693,19 @@ class Device {
                  const QuantizerValues* const x_quant = nullptr,
                  const QuantizerValues* const beta_quant = nullptr,
                  const QuantizerValues* const y_quant = nullptr);
+  virtual void gemm_uint32_dropout
+                (const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE trans_b,
+                 const uint_tp m, const uint_tp n, const uint_tp k,
+                 const uint32_t alpha, vptr<const uint32_t> a,
+                 vptr<const uint32_t> b,
+                 const uint32_t beta,
+                 vptr<uint32_t> c,
+		 vptr<const uint8_t> dropout, float scale,
+                 const QuantizerValues* const alpha_quant = nullptr,
+                 const QuantizerValues* const a_quant = nullptr,
+                 const QuantizerValues* const b_quant = nullptr,
+                 const QuantizerValues* const beta_quant = nullptr,
+                 const QuantizerValues* const c_quant = nullptr);
   virtual void axpy_uint32(const uint_tp n,
                          const uint32_t alpha,
                          vptr<const uint32_t> x,
@@ -669,6 +756,19 @@ class Device {
                  const QuantizerValues* const x_quant = nullptr,
                  const QuantizerValues* const beta_quant = nullptr,
                  const QuantizerValues* const y_quant = nullptr);
+  virtual void gemm_uint64_dropout
+                (const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE trans_b,
+                 const uint_tp m, const uint_tp n, const uint_tp k,
+                 const uint64_t alpha, vptr<const uint64_t> a,
+                 vptr<const uint64_t> b,
+                 const uint64_t beta,
+                 vptr<uint64_t> c,
+		 vptr<uint8_t> dropout, float scale,
+                 const QuantizerValues* const alpha_quant = nullptr,
+                 const QuantizerValues* const a_quant = nullptr,
+                 const QuantizerValues* const b_quant = nullptr,
+                 const QuantizerValues* const beta_quant = nullptr,
+                 const QuantizerValues* const c_quant = nullptr);
   virtual void axpy_uint64(const uint_tp n,
                          const uint64_t alpha,
                          vptr<const uint64_t> x,

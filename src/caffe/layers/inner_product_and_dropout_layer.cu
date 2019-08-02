@@ -17,22 +17,64 @@ void InnerProductAndDropoutLayer<Dtype, MItype, MOtype>::Forward_gpu(
   vptr<Dtype> top_data = top[0]->mutable_gpu_data();
   vptr<const Dtype> weight = this->blobs_[0]->gpu_data();
 
-  if (M_ == 1) {
-    this->device_->template gemv<Dtype>(CblasNoTrans, N_, K_, Dtype(1),
+  if (this->phase_ == TRAIN) {
+    //Billy: Dubious code which needs testing
+    const int_tp count = bottom[0]->count();//count is the number of elements in bottom[0]
+    vptr<uint8_t> mask = rand_vec_.mutable_gpu_data();
+    this->device_->rng_bernoulli(count, 1 - threshold_, mask);
+
+    if (M_ == 1) {//if bottom data is a vector
+      this->device_->template gemv<Dtype>(CblasNoTrans, N_, K_, Dtype(1),
+                               weight, bottom_data, Dtype(0), top_data,
+                               nullptr,
+                               &(this->blobs_quants_[0]->out_quantizer_values()),
+                               &(this->bottom_quants_[0]->out_quantizer_values()),
+                               nullptr,
+                               &(this->top_quants_[0]->in_quantizer_values()));
+      if (bias_term_)
+        this->device_->template axpy<Dtype>(N_, bias_multiplier_.cpu_data()[0],
+                               this->blobs_[1]->gpu_data(), top_data,
+                               &bias_multiplier_qv_,
+                               &(this->blobs_quants_[1]->out_quantizer_values()),
+                               &(this->top_quants_[0]->in_quantizer_values()));
+    } else {
+      this->device_->template gemm_dropout<Dtype>(CblasNoTrans,
+                            transpose_ ? CblasNoTrans : CblasTrans,
+                            M_, N_, K_, Dtype(1),
+                            bottom_data, weight, Dtype(0), top_data,
+                            mask, scale_,
+			    nullptr,
+                            &(this->bottom_quants_[0]->out_quantizer_values()),
+                            &(this->blobs_quants_[0]->out_quantizer_values()),
+                            nullptr,
+                            &(this->top_quants_[0]->in_quantizer_values()));
+      if (bias_term_)
+        this->device_->template gemm_dropout<Dtype>(CblasNoTrans, CblasNoTrans, M_, N_, 1,
+                            Dtype(1), bias_multiplier_.gpu_data(),
+                            this->blobs_[1]->gpu_data(), Dtype(1), top_data,
+                            mask, scale_,
+			    nullptr, &bias_multiplier_qv_,
+                            &(this->blobs_quants_[1]->out_quantizer_values()),
+                            nullptr,
+                            &(this->top_quants_[0]->in_quantizer_values()));
+    }
+  } else {//otherwise, in TEST phase, it is just inner_product
+    if (M_ == 1) {
+      this->device_->template gemv<Dtype>(CblasNoTrans, N_, K_, Dtype(1),
                              weight, bottom_data, Dtype(0), top_data,
                              nullptr,
                              &(this->blobs_quants_[0]->out_quantizer_values()),
                              &(this->bottom_quants_[0]->out_quantizer_values()),
                              nullptr,
                              &(this->top_quants_[0]->in_quantizer_values()));
-    if (bias_term_)
-      this->device_->template axpy<Dtype>(N_, bias_multiplier_.cpu_data()[0],
+      if (bias_term_)
+        this->device_->template axpy<Dtype>(N_, bias_multiplier_.cpu_data()[0],
                              this->blobs_[1]->gpu_data(), top_data,
                              &bias_multiplier_qv_,
                              &(this->blobs_quants_[1]->out_quantizer_values()),
                              &(this->top_quants_[0]->in_quantizer_values()));
-  } else {
-    this->device_->template gemm<Dtype>(CblasNoTrans,
+    } else {
+      this->device_->template gemm<Dtype>(CblasNoTrans,
                           transpose_ ? CblasNoTrans : CblasTrans,
                           M_, N_, K_, Dtype(1),
                           bottom_data, weight, Dtype(0), top_data,
@@ -41,17 +83,18 @@ void InnerProductAndDropoutLayer<Dtype, MItype, MOtype>::Forward_gpu(
                           &(this->blobs_quants_[0]->out_quantizer_values()),
                           nullptr,
                           &(this->top_quants_[0]->in_quantizer_values()));
-    if (bias_term_)
-      this->device_->template gemm<Dtype>(CblasNoTrans, CblasNoTrans, M_, N_, 1,
+      if (bias_term_)
+        this->device_->template gemm<Dtype>(CblasNoTrans, CblasNoTrans, M_, N_, 1,
                           Dtype(1), bias_multiplier_.gpu_data(),
                           this->blobs_[1]->gpu_data(), Dtype(1), top_data,
                           nullptr, &bias_multiplier_qv_,
                           &(this->blobs_quants_[1]->out_quantizer_values()),
                           nullptr,
                           &(this->top_quants_[0]->in_quantizer_values()));
+    }
   }
 }
-
+//TODO modify the backward pass
 template<typename Dtype, typename MItype, typename MOtype>
 void InnerProductAndDropoutLayer<Dtype, MItype, MOtype>::Backward_gpu(
     const vector<Blob<MOtype>*>& top, const vector<bool>& propagate_down,

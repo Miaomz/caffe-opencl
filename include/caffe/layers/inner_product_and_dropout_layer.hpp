@@ -56,12 +56,11 @@ class InnerProductAndDropoutLayer : public Layer<Dtype, MItype, MOtype> {
   QuantizerValues bias_multiplier_qv_;
 
   /// when divided by uint_MAX, the randomly generated values @f$u\sim U(0,1)@f$
-  Blob<uint_tp> rand_vec_;
+  Blob<uint8_t> rand_vec_;
   /// the probability @f$ p @f$ of dropping any input
   float threshold_;
   /// the scale for undropped inputs at train time @f$ 1 / (1 - p) @f$
   float scale_;
-  uint_tp uint_thres_;
 };
 
 }  // namespace caffe
