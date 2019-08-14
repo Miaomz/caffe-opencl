@@ -120,6 +120,11 @@ class LibDNNBlas : public LibDNN<MItype, MOtype> {
          bool beta_term, bool beta_exactly_one);
   void initialize_gemm_tuner(shared_ptr<DeviceProgram> program,
          shared_ptr<LibDNNTuner> tuner);
+  string generate_gemm_dropout_source(shared_ptr<DeviceProgram> program,
+         shared_ptr<LibDNNTuner> tuner, bool trans_A, bool trans_B,
+         const uint_tp M, const uint_tp N, const uint_tp K,
+         bool alpha_term, bool alpha_exactly_one,
+         bool beta_term, bool beta_exactly_one, float scale);
 
   boost::shared_mutex program_mutex_;
   vector<bool> program_ready_;

@@ -14,8 +14,9 @@ void LibDNNBlas<MItype, MOtype>::initialize_gemm_tuner(
     for (int_tp i = 1; i < this->dev_ptr_->workgroup_size(id); i += 1) {
       workgroup_sizes.push_back(i);
     }
+    //TODO increase the def_value from 16 to 32 in Nvidia devices
     tuner->add_set_param <int_tp>("workgroup_size_" + std::to_string(id),
-                                  16, workgroup_sizes);
+                                  32, workgroup_sizes);
   }
 
   tuner->add_range_param<int_tp>("TSK", 8, 1, 32, 1);
@@ -515,6 +516,19 @@ string LibDNNBlas<MItype, MOtype>::generate_gemm_source(
   return ss.str();
 }
 
+//Billy: the program loads the template file and returns the kernel program 
+template<typename MItype, typename MOtype>
+string LibDNNBlas<MItype, MOtype>::generate_gemm_dropout_source(
+    shared_ptr<DeviceProgram> program, shared_ptr<LibDNNTuner> tuner,
+    bool trans_A, bool trans_B,
+    const uint_tp M, const uint_tp N, const uint_tp K,
+    bool alpha_term, bool alpha_exactly_one,
+    bool beta_term, bool beta_exactly_one,
+    float scale) {
+  NOT_IMPLEMENTED;
+  return "";
+}
+
 template<typename MItype, typename MOtype>
 string LibDNNBlas<MItype, MOtype>::gemm_string_identifier(
     const CBLAS_TRANSPOSE trans_A, const CBLAS_TRANSPOSE trans_B,
@@ -523,7 +537,7 @@ string LibDNNBlas<MItype, MOtype>::gemm_string_identifier(
     bool beta_term, bool beta_exactly_one) {
   stringstream ss;
   ss << "gemm_";
-  ss << (trans_A == CblasNoTrans ? "TA_" : "NTA_");//what genious could name it like that...
+  ss << (trans_A == CblasNoTrans ? "TA_" : "NTA_");
   ss << (trans_B == CblasNoTrans ? "TB_" : "NTB_");
   ss << "M" << M << "_";
   ss << "N" << N << "_";
@@ -709,7 +723,128 @@ void LibDNNBlas<MItype, MOtype>::gemm_dropout(
   typedef typename std::conditional<float_is_same<MItype>::value, MItype,
           typename std::conditional<sizeof(MItype) == 1, int32_t,
                                     int64_t>::type>::type Acctype;
-  NOT_IMPLEMENTED;
+
+  bool alpha_term = (alpha != MOtype(0)) || alpha_quant;
+  bool beta_term = (beta != MOtype(0)) || beta_quant;
+  bool alpha_exactly_one = (alpha == MOtype(1)) && !alpha_quant;
+  bool beta_exactly_one = (beta == MOtype(1)) && !beta_quant;
+  
+  //reuse the gemm method
+  string identifier = gemm_string_identifier(trans_A, trans_B, M, N, K,
+                                             alpha_term, alpha_exactly_one,
+                                             beta_term, beta_exactly_one);
+  identifier += "_dropout";
+   
+  int_tp id = get_id(identifier);
+  if (id < 0) {
+    id = get_id_or_new(identifier);
+  }
+  shared_ptr<LibDNNTuner> tuner = program_tuners_[id];
+  shared_ptr<DeviceProgram> program = programs_[id];
+  boost::shared_lock<boost::shared_mutex> lock(program_mutex_);
+  if (!program_ready_[id]) {
+    lock.unlock();
+    // Compiling new kernel has to lock the program lock exclusively
+    boost::unique_lock<boost::shared_mutex> ulock(program_mutex_);
+    if (!program_ready_[id]) {
+      initialize_gemm_tuner(program, tuner);//the parameter program is not used in this method
+      string source_code = generate_gemm_dropout_source(program, tuner,
+                                 trans_A == CblasTrans, trans_B == CblasTrans,
+                                 M, N, K,
+                                 alpha_term, alpha_exactly_one,
+                                 beta_term, beta_exactly_one,
+				 scale);
+      program->set_source(source_code);
+      program->Compile(true, true);
+      program_ready_[id] = true;
+    }
+    ulock.unlock();
+    lock.lock();
+  }
+  lock.unlock();
+
+  // Non-exclusive execute, "libdnn_gemm_dropout" is the key
+  shared_ptr<DeviceKernel> kernel = program->GetKernel("libdnn_gemm_dropout");
+  
+  //TODO replace the hard coded workgroup sizes here
+  //Change the kernel arguments setting into a hard coded one
+  vector<size_t> group = {((N - 1) / 128 + 1),
+                          ((M - 1) / 128 + 1),
+                          1};
+  vector<size_t> local = {16, 16, 1};
+
+  // Quantization parameters
+  int8_t shift_bits =
+      (this->dev_ptr_->template preferred_vector_width<int64_t>() > 0 ? 32 : 16)
+      / sizeof(MItype) - 1;
+
+  MItype A_off;
+  MItype B_off;
+  MOtype C_off;
+  int32_t mult;
+  int8_t shift;
+  Acctype C_min;
+  Acctype C_max;
+  MOtype alpha_off;
+  int32_t alpha_mult;
+  int8_t alpha_shift;
+  MOtype beta_off;
+  int32_t beta_mult;
+  int8_t beta_shift;
+
+  if (is_integer_type<MItype>() || is_integer_type<MOtype>()) {
+    A_off = a_quant->get_zero<MItype>();
+    B_off = b_quant->get_zero<MItype>();
+    C_off = c_quant->get_zero<MOtype>();
+    C_min = c_quant->get_min<Acctype>();
+    C_max = c_quant->get_max<Acctype>();
+    alpha_off = alpha_quant ? alpha_quant->get_zero<MOtype>() : MOtype(0);
+    beta_off = beta_quant ? beta_quant->get_zero<MOtype>() : MOtype(0);
+
+    QuantizerBase::template MultiplicativeQuantVals<int32_t>(
+        a_quant, b_quant, c_quant, &mult, &shift, shift_bits);
+    QuantizerBase::template MultiplicativeQuantVals<int32_t>(
+        c_quant, alpha_quant, c_quant, &alpha_mult, &alpha_shift, shift_bits);
+    QuantizerBase::template MultiplicativeQuantVals<int32_t>(
+        c_quant, beta_quant, c_quant, &beta_mult, &beta_shift, shift_bits);
+  }
+
+  if (is_integer_type<MItype>() || is_integer_type<MOtype>()) {
+    kernel->add_arg(&shift_bits);
+  }
+  if (alpha_term && !alpha_exactly_one) {
+    kernel->add_arg(&alpha);
+    if (is_integer_type<MItype>() || is_integer_type<MOtype>()) {
+      kernel->add_arg(&alpha_off);
+      kernel->add_arg(&alpha_mult);
+      kernel->add_arg(&alpha_shift);
+    }
+  }
+  kernel->add_arg(&A);
+  if (is_integer_type<MItype>() || is_integer_type<MOtype>()) {
+    kernel->add_arg(&A_off);
+  }
+  kernel->add_arg(&B);
+  if (is_integer_type<MItype>() || is_integer_type<MOtype>()) {
+    kernel->add_arg(&B_off);
+  }
+  if (beta_term && !beta_exactly_one) {
+    kernel->add_arg(&beta);
+    if (is_integer_type<MItype>() || is_integer_type<MOtype>()) {
+      kernel->add_arg(&beta_off);
+      kernel->add_arg(&beta_mult);
+      kernel->add_arg(&beta_shift);
+    }
+  }
+  kernel->add_arg(&C);
+  if (is_integer_type<MItype>() || is_integer_type<MOtype>()) {
+    kernel->add_arg(&C_off);
+    kernel->add_arg(&C_min);
+    kernel->add_arg(&C_max);
+    kernel->add_arg(&mult);
+    kernel->add_arg(&shift);
+  }
+  kernel->Execute(group, local);
 }
 
 

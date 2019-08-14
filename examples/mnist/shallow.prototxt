@@ -38,9 +38,6 @@ layer {
   type: "InnerProduct"
   bottom: "data"
   top: "ip1"
-  param {
-    lr_mult: 1
-  }
   inner_product_param {
     num_output: 500
     weight_filler {
@@ -62,9 +59,6 @@ layer {
   type: "InnerProduct"
   bottom: "ip1"
   top: "ip2"
-  param {
-    lr_mult: 1
-  }
   inner_product_param {
     num_output: 10
     weight_filler {

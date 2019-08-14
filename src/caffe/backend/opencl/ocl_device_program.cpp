@@ -99,7 +99,7 @@ bool OclDeviceProgram::Compile(bool load_cache, bool store_cache) {
 
     size_t src_size = src_.size();
     const char* src_ptr = src_.c_str();
-
+//Billy: the only clCreateProgramWithSource
     cl_program compiled_program = clCreateProgramWithSource(ctx.handle().get(),
                                        1, &src_ptr, &src_size, &err);
     if (err != CL_SUCCESS) {

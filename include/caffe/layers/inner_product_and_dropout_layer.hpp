@@ -55,7 +55,7 @@ class InnerProductAndDropoutLayer : public Layer<Dtype, MItype, MOtype> {
   bool transpose_;  ///< if true, assume transposed weights
   QuantizerValues bias_multiplier_qv_;
 
-  /// when divided by uint_MAX, the randomly generated values @f$u\sim U(0,1)@f$
+  ///rand_vec_ should only be 0 or 1 in this version
   Blob<uint8_t> rand_vec_;
   /// the probability @f$ p @f$ of dropping any input
   float threshold_;
