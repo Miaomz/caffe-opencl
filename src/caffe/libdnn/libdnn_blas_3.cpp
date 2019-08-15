@@ -14,9 +14,8 @@ void LibDNNBlas<MItype, MOtype>::initialize_gemm_tuner(
     for (int_tp i = 1; i < this->dev_ptr_->workgroup_size(id); i += 1) {
       workgroup_sizes.push_back(i);
     }
-    //TODO increase the def_value from 16 to 32 in Nvidia devices
     tuner->add_set_param <int_tp>("workgroup_size_" + std::to_string(id),
-                                  32, workgroup_sizes);
+                                  16, workgroup_sizes);
   }
 
   tuner->add_range_param<int_tp>("TSK", 8, 1, 32, 1);
@@ -85,7 +84,7 @@ void LibDNNBlas<MItype, MOtype>::initialize_gemm_tuner(
   tuner->load_params(params);
 }
 
-//Billy: this function has created and built the kernel program
+//Billy: this method has created and built the kernel program
 template<typename MItype, typename MOtype>
 string LibDNNBlas<MItype, MOtype>::generate_gemm_source(
     shared_ptr<DeviceProgram> program, shared_ptr<LibDNNTuner> tuner,
@@ -165,7 +164,6 @@ string LibDNNBlas<MItype, MOtype>::generate_gemm_source(
   ss << program->define("LPTA", "((TSK*TSM)/(RTSM*RTSN))");
   // Loads-per-thread for B
   ss << program->define("LPTB", "((TSK*TSN)/(RTSM*RTSN))");
-
   // Num tiles needs to be next higher even integer
   // (due to some quirky bug in AMD OpenCL 2.0 on Windows)
   ss << program->define("v_num_tiles", "(((K - 1)/(TSK*2) + 1)*2)");
@@ -241,7 +239,7 @@ string LibDNNBlas<MItype, MOtype>::generate_gemm_source(
                              this->program_->template device_type_name<MItype>()
                              + std::to_string(std::min(vwm, vwn))));
 
-
+  //Billy: This calling is necessary because it stores the KernelArgs into the OclDeviceProgram object
   ss << program->function("libdnn_gemm", args, hints);
   // Thread identifiers
   // Local row ID (max: RTSM=TSM/WPTM)
@@ -365,25 +363,6 @@ string LibDNNBlas<MItype, MOtype>::generate_gemm_source(
 
     ss << this->generate_gemm_core(tuner, false, alpha_term,
                                    alpha_exactly_one);
-
-    /*if (is_integer_type<MItype>()) {
-      // Add up columns of A
-      ss << "for (int_tp k = 0; k < TSK; ++k) {" << std::endl;
-      ss << "if (tidn == 0) {" << std::endl;
-      ss << "#pragma unroll" << std::endl;
-      ss << "for (int_tp wm = 0; wm < WPTM; ++wm) {" << std::endl;
-      ss << "Asubrows[tidm * WPTM + wm] += Asub[tidm * WPTM + wm][k];"
-         << std::endl;
-      ss << "}}" << std::endl;
-      // Add up rows of B
-      ss << "if (tidm == 0) {" << std::endl;
-      ss << "#pragma unroll" << std::endl;
-      ss << "for (int_tp wn = 0; wn < WPTN; ++wn) {" << std::endl;
-      ss << "Bsubcols[tidn * WPTN + wn] += Bsub[k][tidn * WPTN + wn];"
-         << std::endl;
-      ss << "}}" << std::endl;
-      ss << "}" << std::endl;
-    }*/
 
     // Synchronize before loading the next tile
     ss << program->local_barrier() << std::endl;
@@ -525,8 +504,167 @@ string LibDNNBlas<MItype, MOtype>::generate_gemm_dropout_source(
     bool alpha_term, bool alpha_exactly_one,
     bool beta_term, bool beta_exactly_one,
     float scale) {
-  NOT_IMPLEMENTED;
-  return "";
+  typedef typename std::conditional<float_is_same<MItype>::value, MItype,
+          typename std::conditional<sizeof(MItype) == 1, int16_t,
+          typename std::conditional<sizeof(MItype) == 2, int32_t,
+                                    int64_t>::type>::type>::type Difftype;
+  typedef typename std::conditional<float_is_same<MItype>::value, MItype,
+          typename std::conditional<sizeof(MItype) == 1, int32_t,
+                                    int64_t>::type>::type Acctype;
+
+  int wptn = tuner->get_param<int>("WPTN");
+  int wptm = tuner->get_param<int>("WPTM");
+  int tsk = tuner->get_param<int>("TSK");
+  int rtsn = tuner->get_param<int>("workgroup_size_0");
+  int rtsm = tuner->get_param<int>("workgroup_size_1");
+  int tsm = wptm * rtsm;
+  int tsn = wptn * rtsn;
+  int vwm = tuner->get_param<int>("VWM");
+  int vwn = tuner->get_param<int>("VWN");
+  int lpta = (tsm * tsk) / (rtsm * rtsn);
+  int lptb = (tsn * tsk) / (rtsm * rtsn);
+  
+  KernelArgs args;
+  if (is_integer_type<MItype>() || is_integer_type<MOtype>()) {
+    args.push_back(program->template create_kernel_arg<int8_t>("shift_bits",
+                                                             KERNEL_ARG_CONST));
+  }
+  if (alpha_term && !alpha_exactly_one) {
+    args.push_back(program->template create_kernel_arg<MOtype>("alpha",
+                                                             KERNEL_ARG_CONST));
+    if (is_integer_type<MOtype>()) {
+      args.push_back(program->template create_kernel_arg<MOtype>("alpha_off",
+                                                             KERNEL_ARG_CONST));
+      args.push_back(program->template create_kernel_arg<int32_t>("alpha_mult",
+                                                             KERNEL_ARG_CONST));
+      args.push_back(program->template create_kernel_arg<int8_t>("alpha_shift",
+                                                             KERNEL_ARG_CONST));
+    }
+  }
+  args.push_back(program->template create_kernel_arg<MItype>("A",
+                                  KERNEL_ARG_MEM_OFFSET | KERNEL_ARG_RESTRICT |
+                                  KERNEL_ARG_GLOBAL_MEM | KERNEL_ARG_CONST));
+  if (is_integer_type<MItype>()) {
+    args.push_back(program->template create_kernel_arg<MItype>("A_off",
+                                                             KERNEL_ARG_CONST));
+  }
+  args.push_back(program->template create_kernel_arg<MItype>("B",
+                                  KERNEL_ARG_MEM_OFFSET | KERNEL_ARG_RESTRICT |
+                                  KERNEL_ARG_GLOBAL_MEM | KERNEL_ARG_CONST));
+  if (is_integer_type<MItype>()) {
+    args.push_back(program->template create_kernel_arg<MItype>("B_off",
+                                                             KERNEL_ARG_CONST));
+  }
+  if (beta_term && !beta_exactly_one) {
+    args.push_back(program->template create_kernel_arg<MOtype>("beta",
+                                                             KERNEL_ARG_CONST));
+    if (is_integer_type<MOtype>()) {
+      args.push_back(program->template create_kernel_arg<MOtype>("beta_off",
+                                                             KERNEL_ARG_CONST));
+      args.push_back(program->template create_kernel_arg<int32_t>("beta_mult",
+                                                             KERNEL_ARG_CONST));
+      args.push_back(program->template create_kernel_arg<int8_t>("beta_shift",
+                                                             KERNEL_ARG_CONST));
+    }
+  }
+  args.push_back(program->template create_kernel_arg<uint8_t>("mask",
+                                  KERNEL_ARG_MEM_OFFSET | KERNEL_ARG_RESTRICT |
+                                  KERNEL_ARG_GLOBAL_MEM | KERNEL_ARG_CONST));
+  /*Still don't understand why there is a *_off for integer types
+  if (is_integer_type<MItype>()) {
+    args.push_back(program->template create_kernel_arg<uint8_t>("mask_off",
+                                                             KERNEL_ARG_CONST));
+  }*/
+  args.push_back(program->template create_kernel_arg<MOtype>("C",
+          KERNEL_ARG_MEM_OFFSET | KERNEL_ARG_GLOBAL_MEM | KERNEL_ARG_RESTRICT));
+  if (is_integer_type<MOtype>()) {
+    args.push_back(program->template create_kernel_arg<MOtype>("C_off",
+                                                             KERNEL_ARG_CONST));
+/*  For some unknown reasons, templates with Acctype can't be compiled.
+    args.push_back(program->template create_kernel_arg<Acctype>("C_min",
+                                                             KERNEL_ARG_CONST));
+    args.push_back(program->template create_kernel_arg<Acctype>("C_max",
+                                                             KERNEL_ARG_CONST));
+*/    args.push_back(program->template create_kernel_arg<int32_t>("mult",
+                                                             KERNEL_ARG_CONST));
+    args.push_back(program->template create_kernel_arg<int8_t>("shift",
+                                                             KERNEL_ARG_CONST));
+  }
+
+  KernelHints hints;
+  hints.push_back(this->program_->create_kernel_hint(KERNEL_REQD_WORK_GROUP_X, rtsn));
+  hints.push_back(this->program_->create_kernel_hint(KERNEL_REQD_WORK_GROUP_Y, rtsm));
+  hints.push_back(this->program_->create_kernel_hint(KERNEL_REQD_WORK_GROUP_Z, 1));
+  hints.push_back(this->program_->create_kernel_hint(KERNEL_HINT_MIN_BLOCKS_PER_MP, 2));
+  hints.push_back(this->program_->create_kernel_hint(KERNEL_HINT_VEC_TYPE,
+                             this->program_->template device_type_name<MItype>()
+                             + std::to_string(std::min(vwm, vwn))));
+ 
+  stringstream ss;
+  ss << program->setup();
+  ss << program->template define_vector_type<MItype>("MItype", 0, 16);
+  ss << program->template define_vector_type<MOtype>("MOtype", 0, 16);
+  ss << program->template define_vector_type<Acctype>("Acctype", 0, 16);
+  ss << program->template define_vector_type<Difftype>("Difftype", 0, 16);
+  if (is_integer_type<MItype>()) {
+    if (this->dev_ptr_->template preferred_vector_width<int64_t>() > 0) {
+      ss << program->template define_vector_type<int64_t>("Multtype", 0, 16);
+    } else {
+      ss << program->template define_vector_type<int32_t>("Multtype", 0, 16);
+    }
+  }
+  ss << program->vector_accessors();
+  // GEMM definitions
+  ss << program->define("M", M);
+  ss << program->define("N", N);
+  ss << program->define("K", K);
+  ss << program->define("SCALE", scale);
+
+  // Local memory padding
+  ss << program->define("v_pad_A", tuner->get_param<int>("lmem_pad_A"));
+  ss << program->define("v_pad_B", tuner->get_param<int>("lmem_pad_B"));
+
+  // The tile-size in dimension M
+  ss << program->define("TSM", tuner->get_param<int>("WPTM")
+          * tuner->get_param<int>("workgroup_size_1"));
+  // The tile-size in dimension N
+  ss << program->define("TSN", tuner->get_param<int>("WPTN")
+          * tuner->get_param<int>("workgroup_size_0"));
+  // The tile-size in dimension K
+  ss << program->define("TSK", tuner->get_param<int>("TSK"));
+  // TSK unrolling
+  ss << program->define("TSK_UNROLL", tuner->get_param<int>("TSK_UNROLL"));
+  // The work-per-thread in dimension M
+  ss << program->define("WPTM", tuner->get_param<int>("WPTM"));
+  ss << program->define("VWM", tuner->get_param<int>("VWM"));
+  // The work-per-thread in dimension N
+  ss << program->define("WPTN", tuner->get_param<int>("WPTN"));
+  ss << program->define("VWN", tuner->get_param<int>("VWN"));
+  // The reduced tile-size in dimension M
+  ss << program->define("RTSM", tuner->get_param<int>("workgroup_size_1"));
+  // The reduced tile-size in dimension N
+  ss << program->define("RTSN", tuner->get_param<int>("workgroup_size_0"));
+  // Loads-per-thread for A
+  ss << program->define("LPTA", "((TSK*TSM)/(RTSM*RTSN))");
+  // Loads-per-thread for B
+  ss << program->define("LPTB", "((TSK*TSN)/(RTSM*RTSN))");
+
+  // Num tiles needs to be next higher even integer
+  // (due to some quirky bug in AMD OpenCL 2.0 on Windows)
+  ss << program->define("v_num_tiles", "(((K - 1)/(TSK*2) + 1)*2)");
+  //Billy: This function 'function' generates the string of function, and manipulate the attributes of OclDeviceKernel, and the function name serves as the key of GetKernel
+  ss << program->function("libdnn_gemm_dropout", args, hints);
+
+  //Then begins the real kernel
+  string line;
+  std::ifstream myfile ("src/caffe/libdnn/my_gemm_core.cl");
+  if (myfile.is_open()){
+    while (getline(myfile,line)){
+      ss << line << '\n';
+    }
+    myfile.close();
+  }  
+  return ss.str();
 }
 
 template<typename MItype, typename MOtype>
@@ -709,7 +847,7 @@ void LibDNNBlas<MItype, MOtype>::gemm_dropout(
                const uint_tp M, const uint_tp N, const uint_tp K,
                const MOtype alpha, vptr<const MItype> A, vptr<const MItype> B,
                const MOtype beta, vptr<MOtype> C,
-	       vptr<const uint8_t> dropout, float scale,
+	       vptr<const uint8_t> mask, float scale,
                const QuantizerValues* const alpha_quant,
                const QuantizerValues* const a_quant,
                const QuantizerValues* const b_quant,
@@ -836,6 +974,7 @@ void LibDNNBlas<MItype, MOtype>::gemm_dropout(
       kernel->add_arg(&beta_shift);
     }
   }
+  kernel->add_arg(&mask);
   kernel->add_arg(&C);
   if (is_integer_type<MItype>() || is_integer_type<MOtype>()) {
     kernel->add_arg(&C_off);

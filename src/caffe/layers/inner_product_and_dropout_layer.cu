@@ -94,7 +94,7 @@ void InnerProductAndDropoutLayer<Dtype, MItype, MOtype>::Forward_gpu(
     }
   }
 }
-//TODO modify the backward pass
+//TODO modify the backward pass. It is just InnerProductLayer now
 template<typename Dtype, typename MItype, typename MOtype>
 void InnerProductAndDropoutLayer<Dtype, MItype, MOtype>::Backward_gpu(
     const vector<Blob<MOtype>*>& top, const vector<bool>& propagate_down,

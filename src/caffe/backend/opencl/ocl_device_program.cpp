@@ -46,8 +46,7 @@ bool OclDeviceProgram::Compile(bool load_cache, bool store_cache) {
                                                &ptx_size);
     if (id >= 0 && ptx_size > 0) {
       vector<char> ptx = vector<char>(ptx_size);  // NOLINT
-      loaded_from_cache = this->device_->get_database()->LoadKernel(id,
-                                                                    &(ptx[0]));
+      loaded_from_cache = this->device_->get_database()->LoadKernel(id, &(ptx[0]));
       if (loaded_from_cache) {
         vector<cl_int> status(ctx.device_num());
         const unsigned char* ptx_ptr =
@@ -96,7 +95,7 @@ bool OclDeviceProgram::Compile(bool load_cache, bool store_cache) {
       fclose(fp);
     }
 #endif  // NDEBUG
-
+    
     size_t src_size = src_.size();
     const char* src_ptr = src_.c_str();
 //Billy: the only clCreateProgramWithSource
