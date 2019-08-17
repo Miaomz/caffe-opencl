@@ -102,7 +102,7 @@ void InnerProductAndDropoutLayer<Dtype, MItype, MOtype>::Reshape(
 
   // Dropout part below. Set up the cache for random number generation
   // ReshapeLike does not work because rand_vec_ is of Dtype uint
-  rand_vec_.Reshape(bottom[0]->shape());
+  rand_vec_.Reshape(top[0]->shape());
 }
 
 template<typename Dtype, typename MItype, typename MOtype>
@@ -130,7 +130,7 @@ void InnerProductAndDropoutLayer<Dtype, MItype, MOtype>::Forward_cpu(
 
   //TODO fully implement ForwardCPU with optimized Dropout later
   uint8_t* mask = rand_vec_.mutable_cpu_data();
-  const int_tp count = bottom[0]->count();
+  const int_tp count = top[0]->count();
   if (this->phase_ == TRAIN) {
     // Create random numbers, but kind of wastes the memory space of mask for it is uint8_t
     caffe_rng_bernoulli(count, 1. - threshold_, mask);
@@ -144,6 +144,18 @@ template<typename Dtype, typename MItype, typename MOtype>
 void InnerProductAndDropoutLayer<Dtype, MItype, MOtype>::Backward_cpu(
     const vector<Blob<MOtype>*>& top, const vector<bool>& propagate_down,
     const vector<Blob<MItype>*>& bottom) {
+  //TODO fully implement ForwardCPU with optimized Dropout later
+  //Interestingly, param_propagate_down is not included in Dropout.
+  //Guess that is because Dropout has no trainable parameters.
+  if (this->phase_ == TRAIN) {
+    const uint8_t* mask = rand_vec_.cpu_data();
+    const int_tp count = top[0]->count();
+    Dtype* top_diff = top[0]->mutable_cpu_diff();
+    for (int_tp i = 0; i < count; ++i) {
+      top_diff[i] = top_diff[i] * mask[i] * scale_;
+    }
+  }
+
   if (this->param_propagate_down_[0]) {
     const Dtype* top_diff = top[0]->cpu_diff();
     const Dtype* bottom_data = bottom[0]->cpu_data();
@@ -183,17 +195,6 @@ void InnerProductAndDropoutLayer<Dtype, MItype, MOtype>::Backward_cpu(
           M_, K_, N_,
           (Dtype)1., top_diff, this->blobs_[0]->cpu_data(),
           (Dtype)0., bottom_diff);
-    }
- 
-    //TODO fully implement ForwardCPU with optimized Dropout later
-    //Interestingly, param_propagate_down is not included in Dropout.
-    //Guess that is because Dropout has no trainable parameters.
-    if (this->phase_ == TRAIN) {
-      const uint8_t* mask = rand_vec_.cpu_data();
-      const int_tp count = bottom[0]->count();
-      for (int_tp i = 0; i < count; ++i) {
-        bottom_diff[i] = bottom_diff[i] * mask[i] * scale_;
-      }
     }
   }
 }

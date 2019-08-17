@@ -22,4 +22,4 @@ max_iter: 10000
 snapshot: 10000
 snapshot_prefix: "examples/mnist/shallow"
 # solver mode: CPU or GPU
-solver_mode: GPU
+solver_mode: CPU
