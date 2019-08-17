@@ -12,6 +12,7 @@
 #include "caffe/definitions.hpp"
 #include "caffe/quantizer.hpp"
 #include "caffe/libdnn/libdnn.hpp"
+#include "caffe/util/type_utils.hpp"
 namespace caffe {
 
 template<typename MItype, typename MOtype>
@@ -67,7 +68,8 @@ class LibDNNBlas : public LibDNN<MItype, MOtype> {
   void gemm_dropout(const CBLAS_TRANSPOSE trans_A, const CBLAS_TRANSPOSE trans_B,
             const uint_tp M, const uint_tp N, const uint_tp K,
             const MOtype alpha, vptr<const MItype> A, vptr<const MItype> B,
-            const MOtype beta, vptr<MOtype> C, vptr<const uint8_t> dropout, float scale,
+            const MOtype beta, vptr<MOtype> C,
+            vptr<const uint8_t> dropout, float scale, DropoutType type,
             const QuantizerValues* const alpha_quant = nullptr,
             const QuantizerValues* const a_quant = nullptr,
             const QuantizerValues* const b_quant = nullptr,
@@ -124,7 +126,8 @@ class LibDNNBlas : public LibDNN<MItype, MOtype> {
          shared_ptr<LibDNNTuner> tuner, bool trans_A, bool trans_B,
          const uint_tp M, const uint_tp N, const uint_tp K,
          bool alpha_term, bool alpha_exactly_one,
-         bool beta_term, bool beta_exactly_one, float scale);
+         bool beta_term, bool beta_exactly_one,
+         float scale, DropoutType type);
 
   boost::shared_mutex program_mutex_;
   vector<bool> program_ready_;

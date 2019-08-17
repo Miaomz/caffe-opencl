@@ -36,15 +36,12 @@ void InnerProductAndDropoutLayer<Dtype, MItype, MOtype>::Forward_gpu(
                                &bias_multiplier_qv_,
                                &(this->blobs_quants_[1]->out_quantizer_values()),
                                &(this->top_quants_[0]->in_quantizer_values()));
-      /*for (int_tp i = 0; i < count; ++i) {
-	top_data[i] = bottom_data[i] * mask[i] * scale_;
-      }*/
     } else {
       this->device_->template gemm_dropout<Dtype>(CblasNoTrans,
                             transpose_ ? CblasNoTrans : CblasTrans,
                             M_, N_, K_, Dtype(1),
                             bottom_data, weight, Dtype(0), top_data,
-                            mask, scale_,
+                            mask, scale_, DROPOUT_N,
 		            nullptr,
                             &(this->bottom_quants_[0]->out_quantizer_values()),
                             &(this->blobs_quants_[0]->out_quantizer_values()),
@@ -54,7 +51,7 @@ void InnerProductAndDropoutLayer<Dtype, MItype, MOtype>::Forward_gpu(
         this->device_->template gemm_dropout<Dtype>(CblasNoTrans, CblasNoTrans, M_, N_, 1,
                             Dtype(1), bias_multiplier_.gpu_data(),
                             this->blobs_[1]->gpu_data(), Dtype(1), top_data,
-                            mask, scale_,
+                            mask, scale_, DROPOUT_N,
           		    nullptr, &bias_multiplier_qv_,
                             &(this->blobs_quants_[1]->out_quantizer_values()),
                             nullptr,

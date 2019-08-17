@@ -26,6 +26,14 @@ namespace caffe {
 #define PROTO_DATA_INDEX_MIN 1
 #define PROTO_DATA_INDEX_MAX 11
 
+///Denotes the dimension where mask array is applied
+enum DropoutType {
+  DROPOUT_K,
+  DROPOUT_MN,
+  DROPOUT_M,
+  DROPOUT_N
+};
+
 
 template<typename T>
 inline size_t safe_sizeof() {

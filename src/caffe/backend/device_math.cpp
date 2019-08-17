@@ -143,13 +143,13 @@ void Device::gemm_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE t
                   const half_fp alpha, vptr<const half_fp> a,
                   vptr<const half_fp> b,
                   const half_fp beta, vptr<half_fp> c,
-		  vptr<const uint8_t> dropout, float scale,
+                  vptr<const uint8_t> dropout, float scale, DropoutType type,
                   const QuantizerValues* const alpha_quant,
                   const QuantizerValues* const a_quant,
                   const QuantizerValues* const b_quant,
                   const QuantizerValues* const beta_quant,
                   const QuantizerValues* const c_quant) {
-  this->gemm_half_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale,
+  this->gemm_half_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale, type,
                   alpha_quant, a_quant, b_quant, beta_quant, c_quant);
 }
 template<>
@@ -227,13 +227,13 @@ void Device::gemm_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE t
                   const float alpha, vptr<const float> a,
                   vptr<const float> b,
                   const float beta, vptr<float> c,
-		  vptr<const uint8_t> dropout, float scale,
+                  vptr<const uint8_t> dropout, float scale, DropoutType type,
                   const QuantizerValues* const alpha_quant,
                   const QuantizerValues* const a_quant,
                   const QuantizerValues* const b_quant,
                   const QuantizerValues* const beta_quant,
                   const QuantizerValues* const c_quant) {
-  this->gemm_float_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale,
+  this->gemm_float_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale, type,
                   alpha_quant, a_quant, b_quant, beta_quant, c_quant);
 }
 template<>
@@ -307,13 +307,13 @@ void Device::gemm_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE t
                   const uint_tp m, const uint_tp n, const uint_tp k,
                   const double alpha, vptr<const double> a,
                   vptr<const double> b, const double beta, vptr<double> c,
-		  vptr<const uint8_t> dropout, float scale,
+                  vptr<const uint8_t> dropout, float scale, DropoutType type,
                   const QuantizerValues* const alpha_quant,
                   const QuantizerValues* const a_quant,
                   const QuantizerValues* const b_quant,
                   const QuantizerValues* const beta_quant,
                   const QuantizerValues* const c_quant) {
-  this->gemm_double_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale,
+  this->gemm_double_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale, type,
                     alpha_quant, a_quant, b_quant, beta_quant, c_quant);
 }
 template<>
@@ -388,13 +388,13 @@ void Device::gemm_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE t
                   const uint_tp m, const uint_tp n, const uint_tp k,
                   const uint8_t alpha, vptr<const uint8_t> a,
                   vptr<const uint8_t> b, const uint8_t beta, vptr<uint8_t> c,
-		  vptr<const uint8_t> dropout, float scale,
+                  vptr<const uint8_t> dropout, float scale, DropoutType type,
                   const QuantizerValues* const alpha_quant,
                   const QuantizerValues* const a_quant,
                   const QuantizerValues* const b_quant,
                   const QuantizerValues* const beta_quant,
                   const QuantizerValues* const c_quant) {
-  this->gemm_uint8_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale,
+  this->gemm_uint8_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale, type,
                    alpha_quant, a_quant, b_quant, beta_quant, c_quant);
 }
 template<>
@@ -471,13 +471,13 @@ void Device::gemm_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE t
                   const uint16_t alpha, vptr<const uint16_t> a,
                   vptr<const uint16_t> b, const uint16_t beta,
                   vptr<uint16_t> c,
-		  vptr<const uint8_t> dropout, float scale,
+                  vptr<const uint8_t> dropout, float scale, DropoutType type,
                   const QuantizerValues* const alpha_quant,
                   const QuantizerValues* const a_quant,
                   const QuantizerValues* const b_quant,
                   const QuantizerValues* const beta_quant,
                   const QuantizerValues* const c_quant) {
-  this->gemm_uint16_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale,
+  this->gemm_uint16_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale, type,
                     alpha_quant, a_quant, b_quant, beta_quant, c_quant);
 }
 template<>
@@ -554,13 +554,13 @@ void Device::gemm_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE t
                   const uint32_t alpha, vptr<const uint32_t> a,
                   vptr<const uint32_t> b, const uint32_t beta,
                   vptr<uint32_t> c,
-		  vptr<const uint8_t> dropout, float scale,
+                  vptr<const uint8_t> dropout, float scale, DropoutType type,
                   const QuantizerValues* const alpha_quant,
                   const QuantizerValues* const a_quant,
                   const QuantizerValues* const b_quant,
                   const QuantizerValues* const beta_quant,
                   const QuantizerValues* const c_quant) {
-  this->gemm_uint32_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale,
+  this->gemm_uint32_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale, type,
                     alpha_quant, a_quant, b_quant, beta_quant, c_quant);
 }
 template<>
@@ -637,13 +637,13 @@ void Device::gemm_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE t
                   const uint64_t alpha, vptr<const uint64_t> a,
                   vptr<const uint64_t> b, const uint64_t beta,
                   vptr<uint64_t> c,
-		  vptr<const uint8_t> dropout, float scale,
+                  vptr<const uint8_t> dropout, float scale, DropoutType type,
                   const QuantizerValues* const alpha_quant,
                   const QuantizerValues* const a_quant,
                   const QuantizerValues* const b_quant,
                   const QuantizerValues* const beta_quant,
                   const QuantizerValues* const c_quant) {
-  this->gemm_uint64_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale,
+  this->gemm_uint64_dropout(trans_a, trans_b, m, n, k, alpha, a, b, beta, c, dropout, scale, type,
                     alpha_quant, a_quant, b_quant, beta_quant, c_quant);
 }
 template<>

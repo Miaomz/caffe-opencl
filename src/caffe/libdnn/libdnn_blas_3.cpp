@@ -503,7 +503,7 @@ string LibDNNBlas<MItype, MOtype>::generate_gemm_dropout_source(
     const uint_tp M, const uint_tp N, const uint_tp K,
     bool alpha_term, bool alpha_exactly_one,
     bool beta_term, bool beta_exactly_one,
-    float scale) {
+    float scale, DropoutType type) {
   typedef typename std::conditional<float_is_same<MItype>::value, MItype,
           typename std::conditional<sizeof(MItype) == 1, int16_t,
           typename std::conditional<sizeof(MItype) == 2, int32_t,
@@ -847,7 +847,7 @@ void LibDNNBlas<MItype, MOtype>::gemm_dropout(
                const uint_tp M, const uint_tp N, const uint_tp K,
                const MOtype alpha, vptr<const MItype> A, vptr<const MItype> B,
                const MOtype beta, vptr<MOtype> C,
-	       vptr<const uint8_t> mask, float scale,
+               vptr<const uint8_t> mask, float scale, DropoutType type,
                const QuantizerValues* const alpha_quant,
                const QuantizerValues* const a_quant,
                const QuantizerValues* const b_quant,
@@ -891,7 +891,7 @@ void LibDNNBlas<MItype, MOtype>::gemm_dropout(
                                  M, N, K,
                                  alpha_term, alpha_exactly_one,
                                  beta_term, beta_exactly_one,
-				 scale);
+				 scale, type);
       program->set_source(source_code);
       program->Compile(true, true);
       program_ready_[id] = true;

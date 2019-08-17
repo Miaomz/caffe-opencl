@@ -45,6 +45,7 @@ enum DeviceCapability {
   DEVICE_CUDA_DP4A_SUPPORT
 };
 
+
 #ifdef USE_LIBDNN
 // Forward declare LibDNN
 class LibDNNBase;
@@ -197,14 +198,14 @@ class Device {
             const QuantizerValues* const y_quant = nullptr);
 
   /*Billy: Dropout applied here and other functions below for each data type */
+  //TODO temporarily use uint8_t, there must be a more efficient way, e.g. image in image memory or bitmap in constant memory
   template<typename Dtype>
   void gemm_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE trans_b,
             const uint_tp m, const uint_tp n, const uint_tp k,
             const Dtype alpha, vptr<const Dtype> a,
             vptr<const Dtype> b,
             const Dtype beta, vptr<Dtype> c,
-//TODO temporarily use uint8_t, there must be a more efficient way, e.g. image in image memory or bitmap in constant memory
-	    vptr<const uint8_t> dropout, float scale,
+            vptr<const uint8_t> dropout, float scale, DropoutType type,
             const QuantizerValues* const alpha_quant = nullptr,
             const QuantizerValues* const a_quant = nullptr,
             const QuantizerValues* const b_quant = nullptr,
@@ -350,13 +351,13 @@ class Device {
                  const QuantizerValues* const a_quant = nullptr,
                  const QuantizerValues* const x_quant = nullptr,
                  const QuantizerValues* const beta_quant = nullptr,
-                 const QuantizerValues* const y_quant = nullptr); 
+                 const QuantizerValues* const y_quant = nullptr);
   virtual void gemm_half_dropout(const CBLAS_TRANSPOSE trans_a, const CBLAS_TRANSPOSE trans_b,
 		 const uint_tp m, const uint_tp n, const uint_tp k,
             	 const half_fp alpha, vptr<const half_fp> a,
             	 vptr<const half_fp> b,
             	 const half_fp beta, vptr<half_fp> c,
-	    	 vptr<const uint8_t> dropout, float scale,
+                 vptr<const uint8_t> dropout, float scale, DropoutType type,
              	 const QuantizerValues* const alpha_quant = nullptr,
             	 const QuantizerValues* const a_quant = nullptr,
             	 const QuantizerValues* const b_quant = nullptr,
@@ -432,7 +433,7 @@ class Device {
             	 const float alpha, vptr<const float> a,
             	 vptr<const float> b,
             	 const float beta, vptr<float> c,
-	    	 vptr<const uint8_t> dropout, float scale,
+                 vptr<const uint8_t> dropout, float scale, DropoutType type,
             	 const QuantizerValues* const alpha_quant = nullptr,
             	 const QuantizerValues* const a_quant = nullptr,
             	 const QuantizerValues* const b_quant = nullptr,
@@ -506,7 +507,7 @@ class Device {
             	 const double alpha, vptr<const double> a,
             	 vptr<const double> b,
             	 const double beta, vptr<double> c,
-	    	 vptr<const uint8_t> dropout, float scale,
+                 vptr<const uint8_t> dropout, float scale, DropoutType type,
             	 const QuantizerValues* const alpha_quant = nullptr,
             	 const QuantizerValues* const a_quant = nullptr,
             	 const QuantizerValues* const b_quant = nullptr,
@@ -577,7 +578,7 @@ class Device {
                  vptr<const uint8_t> b,
                  const uint8_t beta,
                  vptr<uint8_t> c,
-		 vptr<const uint8_t> dropout, float scale,
+                 vptr<const uint8_t> dropout, float scale, DropoutType type,
                  const QuantizerValues* const alpha_quant = nullptr,
                  const QuantizerValues* const a_quant = nullptr,
                  const QuantizerValues* const b_quant = nullptr,
@@ -638,7 +639,7 @@ class Device {
                  vptr<const uint16_t> b,
                  const uint16_t beta,
                  vptr<uint16_t> c,
-		 vptr<const uint8_t> dropout, float scale,
+                 vptr<const uint8_t> dropout, float scale, DropoutType type,
                  const QuantizerValues* const alpha_quant = nullptr,
                  const QuantizerValues* const a_quant = nullptr,
                  const QuantizerValues* const b_quant = nullptr,
@@ -700,7 +701,7 @@ class Device {
                  vptr<const uint32_t> b,
                  const uint32_t beta,
                  vptr<uint32_t> c,
-		 vptr<const uint8_t> dropout, float scale,
+                 vptr<const uint8_t> dropout, float scale, DropoutType type,
                  const QuantizerValues* const alpha_quant = nullptr,
                  const QuantizerValues* const a_quant = nullptr,
                  const QuantizerValues* const b_quant = nullptr,
@@ -763,7 +764,7 @@ class Device {
                  vptr<const uint64_t> b,
                  const uint64_t beta,
                  vptr<uint64_t> c,
-		 vptr<uint8_t> dropout, float scale,
+                 vptr<uint8_t> dropout, float scale, DropoutType type,
                  const QuantizerValues* const alpha_quant = nullptr,
                  const QuantizerValues* const a_quant = nullptr,
                  const QuantizerValues* const b_quant = nullptr,
