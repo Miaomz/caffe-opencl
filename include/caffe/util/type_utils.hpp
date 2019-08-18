@@ -30,6 +30,7 @@ namespace caffe {
 enum DropoutType {
   DROPOUT_K,
   DROPOUT_MN,
+  DROPOUT_MK,
   DROPOUT_M,
   DROPOUT_N
 };

@@ -35,12 +35,11 @@ layer {
 }
 layer {
   name: "ip1"
-  type: "InnerProductAndDropout"
+  type: "InnerProduct"
   bottom: "data"
   top: "ip1"
-  inner_product_and_dropout_param {
+  inner_product_param {
     num_output: 500
-    dropout_ratio: 0.5
     weight_filler {
       type: "xavier"
     }
@@ -57,11 +56,13 @@ layer {
 }
 layer {
   name: "ip2"
-  type: "InnerProduct"
+  type: "DropoutAndInnerProduct"
   bottom: "ip1"
   top: "ip2"
-  inner_product_param {
+  dropout_and_inner_product_param {
     num_output: 10
+    dropout_ratio: 0.5
+    dropout_type: 0
     weight_filler {
       type: "xavier"
     }

@@ -1636,4 +1636,7 @@ message DropoutAndInnerProductParameter {
   // but rather the transfer flag of operations will be toggled accordingly.
   optional bool transpose = 6 [default = false];
   optional float dropout_ratio = 7 [default = 0.5]; // dropout ratio
+  // Dropout type denotes the dimension where mask is applied
+  // 0 is DROPOUT_K, 1 is _MN, 2 is _MK, 3 is _M, and 4 is _N
+  optional uint32 dropout_type = 8 [default = 0];
 }
