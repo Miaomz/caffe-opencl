@@ -34,6 +34,7 @@ class DropoutAndInnerProductLayer : public Layer<Dtype, MItype, MOtype> {
   virtual inline int_tp ExactNumTopBlobs() const { return 1; }
 
  protected:
+  virtual void GenerateProgram();
   virtual void Forward_cpu(const vector<Blob<MItype>*>& bottom,
       const vector<Blob<MOtype>*>& top);
   virtual void Forward_gpu(const vector<Blob<MItype>*>& bottom,

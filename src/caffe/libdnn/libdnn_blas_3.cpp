@@ -570,22 +570,20 @@ string LibDNNBlas<MItype, MOtype>::generate_gemm_dropout_source(
   args.push_back(program->template create_kernel_arg<uint8_t>("mask",
                                   KERNEL_ARG_MEM_OFFSET | KERNEL_ARG_RESTRICT |
                                   KERNEL_ARG_GLOBAL_MEM | KERNEL_ARG_CONST));
-  /*Still don't understand why there is a *_off for integer types
   if (is_integer_type<MItype>()) {
     args.push_back(program->template create_kernel_arg<uint8_t>("mask_off",
                                                              KERNEL_ARG_CONST));
-  }*/
+  }
   args.push_back(program->template create_kernel_arg<MOtype>("C",
           KERNEL_ARG_MEM_OFFSET | KERNEL_ARG_GLOBAL_MEM | KERNEL_ARG_RESTRICT));
   if (is_integer_type<MOtype>()) {
     args.push_back(program->template create_kernel_arg<MOtype>("C_off",
                                                              KERNEL_ARG_CONST));
-/*  For some unknown reasons, templates with Acctype can't be compiled.
     args.push_back(program->template create_kernel_arg<Acctype>("C_min",
                                                              KERNEL_ARG_CONST));
     args.push_back(program->template create_kernel_arg<Acctype>("C_max",
                                                              KERNEL_ARG_CONST));
-*/    args.push_back(program->template create_kernel_arg<int32_t>("mult",
+    args.push_back(program->template create_kernel_arg<int32_t>("mult",
                                                              KERNEL_ARG_CONST));
     args.push_back(program->template create_kernel_arg<int8_t>("shift",
                                                              KERNEL_ARG_CONST));
@@ -656,8 +654,15 @@ string LibDNNBlas<MItype, MOtype>::generate_gemm_dropout_source(
   ss << program->function("libdnn_gemm_dropout", args, hints);
 
   //Then begins the real kernel
+  string file_name;
+  switch(type) {
+    case DROPOUT_K: break;
+    case DROPOUT_MN: file_name = "src/caffe/libdnn/my_gemm_core.cl"; break;
+    case DROPOUT_MK: break;
+    default: LOG(INFO) << "Unknown or illegal dropout type!";
+  }
   string line;
-  std::ifstream myfile ("src/caffe/libdnn/my_gemm_core.cl");
+  std::ifstream myfile(file_name);
   if (myfile.is_open()){
     while (getline(myfile,line)){
       ss << line << '\n';
