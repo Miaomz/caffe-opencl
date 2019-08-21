@@ -18,22 +18,16 @@ void DropoutAndInnerProductLayer<Dtype, MItype, MOtype>::Forward_gpu(
   vptr<const Dtype> weight = this->blobs_[0]->gpu_data();
 
   if (this->phase_ == TRAIN) {
-    int_tp count;
-    if (this->type_ == DROPOUT_K) {
-      count = this->K_;
-    } else {
-      count = bottom[0]->count();
-    }
+    const int_tp count = bottom[0]->count();
     vptr<uint8_t> mask = rand_vec_.mutable_gpu_data();
-    this->device_->rng_bernoulli(count, 1 - threshold_, mask);
+    this->device_->rng_bernoulli(rand_vec_.count(), 1 - threshold_, mask); 
     
     shared_ptr<DeviceKernel> kernel = this->device_program_->GetKernel("PreDropoutForward");
     kernel->add_arg(&count);
     kernel->add_arg(&bottom_data);
     kernel->add_arg(&mask);
     kernel->add_arg(&scale_);
-    kernel->add_arg(&top_data);
-
+    kernel->add_arg(&bottom_data);
     vector<size_t> work_size(1, count);
     vector<size_t> group;
     vector<size_t> local;
@@ -196,29 +190,26 @@ void DropoutAndInnerProductLayer<Dtype, MItype, MOtype>::Backward_gpu(
         }
       } else if (this->type_ == DROPOUT_MK){
         if (transpose_) {
-          this->device_->template gemm<Dtype>(CblasNoTrans, CblasTrans,
+          this->device_->template gemm_dropout<Dtype>(CblasNoTrans, CblasTrans,
                               M_, K_, N_,
                               (Dtype) 1., top_diff, this->blobs_[0]->gpu_data(),
-                              (Dtype) 0., bottom_diff);
+                              (Dtype) 0., bottom_diff,
+                              mask, 1.0, DROPOUT_MN);
         } else {
-          this->device_->template gemm<Dtype>(CblasNoTrans, CblasNoTrans,
+          this->device_->template gemm_dropout<Dtype>(CblasNoTrans, CblasNoTrans,
                               M_, K_, N_,
                               (Dtype) 1., top_diff, this->blobs_[0]->gpu_data(),
-                              (Dtype) 0., bottom_diff);
+                              (Dtype) 0., bottom_diff,
+                              mask, 1.0, DROPOUT_MN);
         }
       } else {
         NOT_IMPLEMENTED;
       }
 
-      int_tp count;
-      if (this->type_ == DROPOUT_K) {
-        count = this->K_;
-      } else {
-        count = bottom[0]->count();
-      }
+      const int_tp count = bottom[0]->count();
       shared_ptr<DeviceKernel> kernel = this->device_program_->GetKernel("PreDropoutBackward");
       kernel->add_arg(&count);
-      kernel->add_arg(&top_diff);
+      kernel->add_arg(&bottom_diff);
       kernel->add_arg(&mask);
       kernel->add_arg(&scale_);
       kernel->add_arg(&bottom_diff);

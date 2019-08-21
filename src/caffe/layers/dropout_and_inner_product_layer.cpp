@@ -143,13 +143,13 @@ void DropoutAndInnerProductLayer<Dtype, MItype, MOtype>::GenerateProgram() {
                     "out", KERNEL_ARG_GLOBAL_MEM));
   ss << this->device_program_->function("PreDropoutForward", fw_args);
   ss << this->device_program_->kernel_loop("uint_tp", "index", "n");
-  ss << "out[index] = in[index] * (Dtype)(mask[index";
+  ss << "out[index] = in[index] * scale * (Dtype)(mask[index";
   switch (this->type_){
     case DROPOUT_K: ss << " % " << this->K_ ; break;
     case DROPOUT_MK: break;
     default: NOT_IMPLEMENTED;
   }
-  ss << "]) * scale;" << std::endl;
+  ss << "]);" << std::endl;
   ss << "}" << std::endl;
   ss << "}" << std::endl;
 
@@ -200,7 +200,7 @@ void DropoutAndInnerProductLayer<Dtype, MItype, MOtype>::Forward_cpu(
       for (int_tp i = 0; i < count; ++i)
         bottom_data[i] = bottom_data[i] * mask[i] * scale_;
     } else {
-      LOG(INFO) << "Unknown or illegal Dropout type";
+        NOT_IMPLEMENTED;
     }
   }
 
@@ -274,7 +274,7 @@ void DropoutAndInnerProductLayer<Dtype, MItype, MOtype>::Backward_cpu(
         for (int_tp i = 0; i < count; ++i)
           bottom_diff[i] = bottom_diff[i] * mask[i] * scale_;
       } else {
-        LOG(INFO) << "Unknown or illegal Dropout type";
+          NOT_IMPLEMENTED;
       }
     }
   }

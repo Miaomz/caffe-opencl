@@ -28,7 +28,11 @@ int_tp id = la * RTSN * RTSM + tid;
 int_tp row = id / TSK;
 int_tp col = id % TSK;
 if ((offM + row) < M && col < K) {
+#if TRANS_A == 1
+Asub[row][col] = A[(offM + row) + col * M]
+#else
 Asub[row][col] = A[(offM + row) * K + col];
+#endif
 } else {
 Asub[row][col] = (MItype)0.0;
 }
@@ -40,7 +44,11 @@ int_tp id = lb * RTSN * RTSM + tid;
 int_tp row = id / TSN;
 int_tp col = id % TSN;
 if ((offN + col) < N && row < K) {
+#if TRANS_B == 1
 Bsub[row][col] = B[(offN + col) * K + row];
+#else
+Bsub[row][col] = B[(offN + col) + row * N];
+#endif
 } else {
 Bsub[row][col] = (MItype)0.0;
 }
@@ -102,7 +110,11 @@ int_tp row = id / TSK;
 int_tp col = id % TSK;
 int_tp tiledIndex = TSK * t + col;
 if ((offM + row) < M && tiledIndex < K) {
+#if TRANS_A == 1
+Asub[row][col] = A[(offM + row) + tiledIndex * M];
+#else
 Asub[row][col] = A[(offM + row) * K + tiledIndex];
+#endif
 } else {
 Asub[row][col] = (MItype)0.0;
 }
@@ -117,7 +129,11 @@ int_tp row = id / TSN;
 int_tp col = id % TSN;
 int_tp tiledIndex = TSK * t + row;
 if ((offN + col) < N && tiledIndex < K) {
+#if TRANS_B == 1
 Bsub[row][col] = B[(offN + col) * K + tiledIndex];
+#else
+Bsub[row][col] = B[(offN + col) + tiledIndex * N];
+#endif
 } else {
 Bsub[row][col] = (MItype)0.0;
 }

@@ -61,8 +61,8 @@ layer {
   top: "ip2"
   dropout_and_inner_product_param {
     num_output: 10
-    dropout_ratio: 0.5
-    dropout_type: 0
+    dropout_ratio: 1
+    dropout_type: 1 
     weight_filler {
       type: "xavier"
     }

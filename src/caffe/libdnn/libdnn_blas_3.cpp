@@ -616,6 +616,8 @@ string LibDNNBlas<MItype, MOtype>::generate_gemm_dropout_source(
   ss << program->define("M", M);
   ss << program->define("N", N);
   ss << program->define("K", K);
+  ss << program->define("TRANS_A", (int_tp)trans_A);
+  ss << program->define("TRANS_B", (int_tp)trans_B);
   ss << program->define("SCALE", scale);
 
   // Local memory padding
@@ -658,7 +660,8 @@ string LibDNNBlas<MItype, MOtype>::generate_gemm_dropout_source(
   switch(type) {
     case DROPOUT_K: break;
     case DROPOUT_MN: file_name = "src/caffe/libdnn/my_gemm_core.cl"; break;
-    case DROPOUT_MK: break;
+    case DROPOUT_M: break;
+    case DROPOUT_N: break;
     default: LOG(INFO) << "Unknown or illegal dropout type!";
   }
   string line;

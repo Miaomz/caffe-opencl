@@ -26,11 +26,11 @@ namespace caffe {
 #define PROTO_DATA_INDEX_MIN 1
 #define PROTO_DATA_INDEX_MAX 11
 
-///Denotes the dimension where mask array is applied
+///Denotes the dimension where mask array is applied. The layer and gemm follows different systems
 enum DropoutType {
   DROPOUT_K,
-  DROPOUT_MN,
   DROPOUT_MK,
+  DROPOUT_MN,
   DROPOUT_M,
   DROPOUT_N
 };

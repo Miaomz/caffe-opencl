@@ -26,6 +26,7 @@ bool OclDeviceProgram::Compile(bool load_cache, bool store_cache) {
   string build_opts = "";
   build_opts += "-cl-mad-enable ";
   build_opts += "-cl-single-precision-constant ";
+//  string build_opts = "-cl-opt-disable ";
 
   bool loaded_from_cache = false;
   string flags = this->device_->name() + build_opts;
