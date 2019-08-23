@@ -271,6 +271,7 @@ void DropoutAndInnerProductLayer<Dtype, MItype, MOtype>::Backward_gpu(
         NOT_IMPLEMENTED;
       }
 
+      // this is needed, otherwise the accuracy will be lower
       const int_tp count = bottom[0]->count();
       shared_ptr<DeviceKernel> kernel = this->device_program_->GetKernel("PreDropoutBackward");
       kernel->add_arg(&count);
