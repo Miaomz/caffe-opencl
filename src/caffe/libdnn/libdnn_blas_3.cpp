@@ -659,7 +659,7 @@ string LibDNNBlas<MItype, MOtype>::generate_gemm_dropout_source(
   string file_name;
   switch(type) {
     case DROPOUT_K: break;
-    case DROPOUT_MN: file_name = "src/caffe/libdnn/my_gemm_core.cl"; break;
+    case DROPOUT_MN: file_name = "src/caffe/libdnn/new_gemm_core.cl"; break;
     case DROPOUT_M: break;
     case DROPOUT_N: break;
     default: LOG(INFO) << "Unknown or illegal dropout type!";

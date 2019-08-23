@@ -55,8 +55,11 @@ class DropoutAndInnerProductLayer : public Layer<Dtype, MItype, MOtype> {
   bool transpose_;  ///< if true, assume transposed weights
   QuantizerValues bias_multiplier_qv_;
 
-  ///rand_vec_ should only be 0 or 1 in this version
+  /// rand_vec_ should only be 0 or 1 in CPU mode and GPU's backward pass,
+  /// and simulate real numbers in GPU mode's forward pass
   Blob<uint8_t> rand_vec_;
+  /// threshold for GPU kernel
+  uint8_t uint_thres_;
   /// the probability @f$ p @f$ of dropping any input
   float threshold_;
   /// the scale for undropped inputs at train time @f$ 1 / (1 - p) @f$

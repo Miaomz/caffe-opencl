@@ -65,7 +65,8 @@ void DropoutAndInnerProductLayer<Dtype, MItype, MOtype>::LayerSetUp(
   DCHECK(threshold_ > 0.);
   DCHECK(threshold_ < 1.);
   scale_ = 1. / (1. - threshold_);
-
+  uint_thres_ = static_cast<uint8_t>(static_cast<long double>(std::numeric_limits<uint8_t>::max())
+                                    * static_cast<long double>(threshold_));
   this->InitializeQuantizers(bottom, top);
 }
 
@@ -117,66 +118,6 @@ void DropoutAndInnerProductLayer<Dtype, MItype, MOtype>::Reshape(
   if (Caffe::mode() == Caffe::GPU && this->device_program_.get() == nullptr) {
     this->GenerateProgram();
   }
-}
-
-
-template<typename Dtype, typename MItype, typename MOtype>
-void DropoutAndInnerProductLayer<Dtype, MItype, MOtype>::GenerateProgram() {
-  this->device_program_ = this->device_->CreateProgram();
-  stringstream ss;
-
-  ss << this->device_program_->setup();
-  ss << this->device_program_->template define_type<Dtype>("Dtype");
-  ss << this->device_program_->template define_type<MItype>("MItype");
-  ss << this->device_program_->template define_type<MOtype>("MOtype");
-
-  KernelArgs fw_args;
-  fw_args.push_back(this->device_program_->template create_kernel_arg<uint_tp>(
-                    "n", KERNEL_ARG_CONST));
-  fw_args.push_back(this->device_program_->template create_kernel_arg<MItype>(
-                    "in", KERNEL_ARG_CONST | KERNEL_ARG_GLOBAL_MEM));
-  fw_args.push_back(this->device_program_->template create_kernel_arg<uint_tp>(
-                    "mask", KERNEL_ARG_CONST | KERNEL_ARG_GLOBAL_MEM));
-  fw_args.push_back(this->device_program_->template create_kernel_arg<Dtype>(
-                    "scale", KERNEL_ARG_CONST));
-  fw_args.push_back(this->device_program_->template create_kernel_arg<MOtype>(
-                    "out", KERNEL_ARG_GLOBAL_MEM));
-  ss << this->device_program_->function("PreDropoutForward", fw_args);
-  ss << this->device_program_->kernel_loop("uint_tp", "index", "n");
-  ss << "out[index] = in[index] * scale * (Dtype)(mask[index";
-  switch (this->type_){
-    case DROPOUT_K: ss << " % " << this->K_ ; break;
-    case DROPOUT_MK: break;
-    default: NOT_IMPLEMENTED;
-  }
-  ss << "]);" << std::endl;
-  ss << "}" << std::endl;
-  ss << "}" << std::endl;
-
-  KernelArgs bw_args;
-  bw_args.push_back(this->device_program_->template create_kernel_arg<uint_tp>(
-                    "n", KERNEL_ARG_CONST));
-  bw_args.push_back(this->device_program_->template create_kernel_arg<MOtype>(
-                    "in_diff", KERNEL_ARG_CONST | KERNEL_ARG_GLOBAL_MEM));
-  bw_args.push_back(this->device_program_->template create_kernel_arg<uint_tp>(
-                    "mask", KERNEL_ARG_CONST | KERNEL_ARG_GLOBAL_MEM));
-  bw_args.push_back(this->device_program_->template create_kernel_arg<Dtype>(
-                    "scale", KERNEL_ARG_CONST));
-  bw_args.push_back(this->device_program_->template create_kernel_arg<MItype>(
-                    "out_diff", KERNEL_ARG_GLOBAL_MEM));
-  ss << this->device_program_->function("PreDropoutBackward", bw_args);
-  ss << this->device_program_->kernel_loop("uint_tp", "index", "n");
-  ss << "out_diff[index] = in_diff[index] * scale * (Dtype)(mask[index";
-  switch (this->type_){
-    case DROPOUT_K: ss << " % " << this->K_; break;
-    case DROPOUT_MK: break;
-    default: NOT_IMPLEMENTED;
-  }
-  ss << "]);" << std::endl;
-  ss << "}" << std::endl;
-  ss << "}" << std::endl;
-  this->device_program_->set_source(ss.str());
-  this->device_program_->Compile(true, true);
 }
 
 

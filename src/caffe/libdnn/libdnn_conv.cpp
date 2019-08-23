@@ -1797,6 +1797,7 @@ void LibDNNConv<MItype, MOtype>::GenerateKernels() {
   }
 
   // Write complete kernel string
+std::cout << ss.str() << std::endl;
   this->program_->set_source(ss.str());
 }
 

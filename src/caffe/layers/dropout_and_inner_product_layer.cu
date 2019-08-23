@@ -10,6 +10,69 @@
 namespace caffe {
 
 template<typename Dtype, typename MItype, typename MOtype>
+void DropoutAndInnerProductLayer<Dtype, MItype, MOtype>::GenerateProgram() {
+  this->device_program_ = this->device_->CreateProgram();
+  stringstream ss;
+
+  ss << this->device_program_->setup();
+  ss << this->device_program_->template define_type<Dtype>("Dtype");
+  ss << this->device_program_->template define_type<MItype>("MItype");
+  ss << this->device_program_->template define_type<MOtype>("MOtype");
+
+  KernelArgs fw_args;
+  fw_args.push_back(this->device_program_->template create_kernel_arg<uint_tp>(
+                    "n", KERNEL_ARG_CONST));
+  fw_args.push_back(this->device_program_->template create_kernel_arg<MItype>(
+                    "in", KERNEL_ARG_CONST | KERNEL_ARG_GLOBAL_MEM));
+  fw_args.push_back(this->device_program_->template create_kernel_arg<uint8_t>(
+                    "mask", KERNEL_ARG_GLOBAL_MEM));
+  fw_args.push_back(this->device_program_->template create_kernel_arg<uint8_t>(
+                    "threshold", KERNEL_ARG_CONST));
+  fw_args.push_back(this->device_program_->template create_kernel_arg<Dtype>(
+                    "scale", KERNEL_ARG_CONST));
+  fw_args.push_back(this->device_program_->template create_kernel_arg<MOtype>(
+                    "out", KERNEL_ARG_GLOBAL_MEM));
+  ss << this->device_program_->function("PreDropoutForward", fw_args);
+  ss << this->device_program_->kernel_loop("uint_tp", "index", "n");
+  string indexToMask;
+  switch (this->type_){
+    case DROPOUT_K: indexToMask = "index % " + this->K_; break;
+    case DROPOUT_MK: indexToMask = "index"; break;
+    default: NOT_IMPLEMENTED;
+  }
+  ss << "mask[" << indexToMask << "] = (uint8_t)(mask[" << indexToMask <<  "] >= threshold);"  << std::endl;
+  ss << "out[index] = in[index] * scale * (Dtype)(mask[" << indexToMask << "]);" << std::endl;
+  ss << "}" << std::endl;
+  ss << "}" << std::endl;
+
+  KernelArgs bw_args;
+  bw_args.push_back(this->device_program_->template create_kernel_arg<uint_tp>(
+                    "n", KERNEL_ARG_CONST));
+  bw_args.push_back(this->device_program_->template create_kernel_arg<MOtype>(
+                    "in_diff", KERNEL_ARG_CONST | KERNEL_ARG_GLOBAL_MEM));
+  bw_args.push_back(this->device_program_->template create_kernel_arg<uint8_t>(
+                    "mask", KERNEL_ARG_CONST | KERNEL_ARG_GLOBAL_MEM));
+  bw_args.push_back(this->device_program_->template create_kernel_arg<Dtype>(
+                    "scale", KERNEL_ARG_CONST));
+  bw_args.push_back(this->device_program_->template create_kernel_arg<MItype>(
+                    "out_diff", KERNEL_ARG_GLOBAL_MEM));
+  ss << this->device_program_->function("PreDropoutBackward", bw_args);
+  ss << this->device_program_->kernel_loop("uint_tp", "index", "n");
+  ss << "out_diff[index] = in_diff[index] * scale * (Dtype)(mask[index";
+  switch (this->type_){
+    case DROPOUT_K: ss << " % " << this->K_; break;
+    case DROPOUT_MK: break;
+    default: NOT_IMPLEMENTED;
+  }
+  ss << "]);" << std::endl;
+  ss << "}" << std::endl;
+  ss << "}" << std::endl;
+  this->device_program_->set_source(ss.str());
+  this->device_program_->Compile(true, true);
+}
+
+
+template<typename Dtype, typename MItype, typename MOtype>
 void DropoutAndInnerProductLayer<Dtype, MItype, MOtype>::Forward_gpu(
                                            const vector<Blob<MItype>*>& bottom,
                                            const vector<Blob<MOtype>*>& top) {
@@ -20,18 +83,20 @@ void DropoutAndInnerProductLayer<Dtype, MItype, MOtype>::Forward_gpu(
   if (this->phase_ == TRAIN) {
     const int_tp count = bottom[0]->count();
     vptr<uint8_t> mask = rand_vec_.mutable_gpu_data();
-    this->device_->rng_bernoulli(rand_vec_.count(), 1 - threshold_, mask); 
+    this->device_->rng_uniform(rand_vec_.count(), mask); 
     
     shared_ptr<DeviceKernel> kernel = this->device_program_->GetKernel("PreDropoutForward");
     kernel->add_arg(&count);
     kernel->add_arg(&bottom_data);
     kernel->add_arg(&mask);
+    kernel->add_arg(&uint_thres_);
     kernel->add_arg(&scale_);
     kernel->add_arg(&bottom_data);
     vector<size_t> work_size(1, count);
     vector<size_t> group;
     vector<size_t> local;
     this->device_->get_threads(&work_size, &group, &local, kernel.get(), true);
+    kernel->Execute(group, local);
 
     if (M_ == 1) {// No value to optimize
       this->device_->template gemv<Dtype>(CblasNoTrans, N_, K_, Dtype(1),
@@ -217,9 +282,25 @@ void DropoutAndInnerProductLayer<Dtype, MItype, MOtype>::Backward_gpu(
       vector<size_t> group;
       vector<size_t> local;
       this->device_->get_threads(&work_size, &group, &local, kernel.get(), true);
+      kernel->Execute(group, local);
     }
   }
 }
+
+INSTANTIATE_CLASST_FUNC_3T_GUARDED(DropoutAndInnerProductLayer, GenerateProgram,
+                                  (half_fp), (half_fp), (half_fp));
+INSTANTIATE_CLASST_FUNC_3T_GUARDED(DropoutAndInnerProductLayer, GenerateProgram,
+                                  (float), (float), (float));
+INSTANTIATE_CLASST_FUNC_3T_GUARDED(DropoutAndInnerProductLayer, GenerateProgram,
+                                  (double), (double), (double));
+INSTANTIATE_CLASST_FUNC_3T_GUARDED(DropoutAndInnerProductLayer, GenerateProgram,
+                                  (uint8_t), (uint8_t), (uint8_t));
+INSTANTIATE_CLASST_FUNC_3T_GUARDED(DropoutAndInnerProductLayer, GenerateProgram,
+                                  (uint16_t), (uint16_t), (uint16_t));
+INSTANTIATE_CLASST_FUNC_3T_GUARDED(DropoutAndInnerProductLayer, GenerateProgram,
+                                  (uint32_t), (uint32_t), (uint32_t));
+INSTANTIATE_CLASST_FUNC_3T_GUARDED(DropoutAndInnerProductLayer, GenerateProgram,
+                                  (uint64_t), (uint64_t), (uint64_t));
 
 INSTANTIATE_CLASST_FUNC_3T_GUARDED(DropoutAndInnerProductLayer, Forward_gpu,
                                   (half_fp), (half_fp), (half_fp));
