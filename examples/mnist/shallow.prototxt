@@ -39,7 +39,7 @@ layer {
   bottom: "data"
   top: "ip1"
   inner_product_param {
-    num_output: 500
+    num_output: 512
     weight_filler {
       type: "xavier"
     }
@@ -60,6 +60,75 @@ layer {
   bottom: "ip1"
   top: "ip2"
   dropout_and_inner_product_param {
+    num_output: 512
+    dropout_ratio: 0.5
+    dropout_type: 1 
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "relu2"
+  type: "ReLU"
+  bottom: "ip2"
+  top: "ip2"
+}
+layer {
+  name: "ip3"
+  type: "DropoutAndInnerProduct"
+  bottom: "ip2"
+  top: "ip3"
+  dropout_and_inner_product_param {
+    num_output: 512
+    dropout_ratio: 0.5
+    dropout_type: 1 
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "relu3"
+  type: "ReLU"
+  bottom: "ip3"
+  top: "ip3"
+}
+layer {
+  name: "ip4"
+  type: "DropoutAndInnerProduct"
+  bottom: "ip3"
+  top: "ip4"
+  dropout_and_inner_product_param {
+    num_output: 256
+    dropout_ratio: 0.5
+    dropout_type: 1 
+    weight_filler {
+      type: "xavier"
+    }
+    bias_filler {
+      type: "constant"
+    }
+  }
+}
+layer {
+  name: "relu4"
+  type: "ReLU"
+  bottom: "ip4"
+  top: "ip4"
+}
+layer {
+  name: "ip5"
+  type: "DropoutAndInnerProduct"
+  bottom: "ip4"
+  top: "ip5"
+  dropout_and_inner_product_param {
     num_output: 10
     dropout_ratio: 0.5
     dropout_type: 1 
@@ -74,7 +143,7 @@ layer {
 layer {
   name: "accuracy"
   type: "Accuracy"
-  bottom: "ip2"
+  bottom: "ip5"
   bottom: "label"
   top: "accuracy"
   include {
@@ -84,7 +153,7 @@ layer {
 layer {
   name: "loss"
   type: "SoftmaxWithLoss"
-  bottom: "ip2"
+  bottom: "ip5"
   bottom: "label"
   top: "loss"
 }
