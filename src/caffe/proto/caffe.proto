@@ -385,7 +385,7 @@ message ParamSpec {
 // NOTE
 // Update the next available ID when you add a new LayerParameter field.
 //
-// LayerParameter next available layer-specific ID: 154 (last added: dropout_and_inner_product_param)
+// LayerParameter next available layer-specific ID: 155 (last added: dropout_and_conv_param)
 message LayerParameter {
   optional string name = 1; // the layer name
   optional string type = 2; // the layer type
@@ -508,6 +508,7 @@ message LayerParameter {
   optional NoiseParameter noise_param = 151;
   optional InnerProductAndDropoutParameter inner_product_and_dropout_param = 152;
   optional DropoutAndInnerProductParameter dropout_and_inner_product_param = 153;
+  optional DropoutAndConvolutionParameter dropout_and_convolution_param = 154;
 }
 
 // Message that stores parameters used to apply transformation
@@ -1640,3 +1641,65 @@ message DropoutAndInnerProductParameter {
   // 0 is DROPOUT_K, 1 is _MN, 2 is _MK, 3 is _M, and 4 is _N
   optional uint32 dropout_type = 8 [default = 0];
 }
+
+message DropoutAndConvolutionParameter {
+  optional uint64 num_output = 1; // The number of outputs for the layer
+  optional bool bias_term = 2 [default = true]; // whether to have bias terms
+
+  // Pad, kernel size, and stride are all given as a single value for equal
+  // dimensions in all spatial dimensions, or once per spatial dimension.
+  repeated uint64 pad = 3; // The padding size; defaults to 0
+  repeated uint64 kernel_size = 4; // The kernel size
+  repeated uint64 stride = 6; // The stride; defaults to 1
+  // Factor used to dilate the kernel, (implicitly) zero-filling the resulting
+  // holes. (Kernel dilation is sometimes referred to by its use in the
+  // algorithme à trous from Holschneider et al. 1987.)
+  repeated uint64 dilation = 18; // The dilation; defaults to 1
+
+  // For 2D convolution only, the *_h and *_w versions may also be used to
+  // specify both spatial dimensions.
+  optional uint64 pad_h = 9 [default = 0]; // The padding height (2D only)
+  optional uint64 pad_w = 10 [default = 0]; // The padding width (2D only)
+  optional uint64 kernel_h = 11; // The kernel height (2D only)
+  optional uint64 kernel_w = 12; // The kernel width (2D only)
+  optional uint64 stride_h = 13; // The stride height (2D only)
+  optional uint64 stride_w = 14; // The stride width (2D only)
+
+  optional uint64 group = 5 [default = 1]; // The group size for group conv
+
+  optional FillerParameter weight_filler = 7; // The filler for the weight
+  optional FillerParameter bias_filler = 8; // The filler for the bias
+  enum Engine {
+    DEFAULT = 0;
+    CAFFE = 1;
+    CUDNN = 2;
+    LIBDNN = 3;
+    INTEL_SPATIAL = 4;
+    FFT = 5;
+  }
+  optional Engine engine = 15 [default = DEFAULT];
+  
+  // The axis to interpret as "channels" when performing convolution.
+  // Preceding dimensions are treated as independent inputs;
+  // succeeding dimensions are treated as "spatial".
+  // With (n, c, H, W) inputs, and axis == 1 (the default), we perform
+  // n independent 2D convolutions, sliding c-channel (or (c/g)-channels, for
+  // groups g>1) filters across the spatial axes (H, W) of the input.
+  // With (n, c, D, H, W) inputs, and axis == 1, we perform
+  // n independent 3D convolutions, sliding (c/g)-channels
+  // filters across the spatial axes (D, H, W) of the input.
+  optional int64 axis = 16 [default = 1];
+
+  // Whether to force use of the general ND convolution, even if a specific
+  // implementation for blobs of the appropriate number of spatial dimensions
+  // is available. (Currently, there is only a 2D-specific convolution
+  // implementation; for input blobs with num_axes != 2, this option is
+  // ignored and the ND implementation will be used.)
+  optional bool force_nd_im2col = 17 [default = false];
+
+  optional float dropout_ratio = 19 [default = 0.5];
+  // Dropout type denotes the dimension where mask is applied
+  // 0 is DROPOUT_K, 1 is _MK, 2 is _MN, 3 is _M, and 4 is _N
+  optional uint32 dropout_type = 20 [default = 1];
+}
+

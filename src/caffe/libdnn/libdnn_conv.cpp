@@ -1467,8 +1467,6 @@ string LibDNNConv<MItype, MOtype>::generate_bw_kernels(string name) {
   int tsn = wptn * rtsn;
   int vwm = bw_tuner_->get_param<int>("VWM");
   int vwn = bw_tuner_->get_param<int>("VWN");
-  // int lpta = (tsm * tsk) / (rtsm * rtsn);
-  // int lptb = (tsn * tsk) / (rtsm * rtsn);
 
   // Backward kernel
   KernelArgs args;
@@ -1753,6 +1751,322 @@ string LibDNNConv<MItype, MOtype>::generate_bw_kernels(string name) {
 }
 
 template<typename MItype, typename MOtype>
+string LibDNNConv<MItype, MOtype>::generate_bw_dropout_kernels(string name) {
+  stringstream ss;
+  int wptn = bw_tuner_->get_param<int>("WPTN");
+  int wptm = bw_tuner_->get_param<int>("WPTM");
+  int tsk = bw_tuner_->get_param<int>("TSK");
+  int rtsn = bw_tuner_->get_param<int>("workgroup_size_0");
+  int rtsm = bw_tuner_->get_param<int>("workgroup_size_1");
+  int tsm = wptm * rtsm;
+  int tsn = wptn * rtsn;
+  int vwm = bw_tuner_->get_param<int>("VWM");
+  int vwn = bw_tuner_->get_param<int>("VWN");
+
+  // Backward kernel
+  KernelArgs args;
+  args.push_back(this->program_->template create_kernel_arg<MItype>("im_out",
+               KERNEL_ARG_CONST | KERNEL_ARG_GLOBAL_MEM | KERNEL_ARG_RESTRICT));
+  args.push_back(this->program_->template create_kernel_arg<MItype>("wg",
+               KERNEL_ARG_CONST | KERNEL_ARG_GLOBAL_MEM | KERNEL_ARG_RESTRICT));
+  if (bias_term_) {
+    args.push_back(this->program_->template create_kernel_arg<MItype>("bias",
+               KERNEL_ARG_CONST | KERNEL_ARG_GLOBAL_MEM | KERNEL_ARG_RESTRICT));
+  }
+  args.push_back(this->program_->template create_kernel_arg<MItype>("im_in",
+                                  KERNEL_ARG_GLOBAL_MEM | KERNEL_ARG_RESTRICT));
+  args.push_back(this->program_->template create_kernel_arg<MItype>("mask",
+               KERNEL_ARG_CONST | KERNEL_ARG_GLOBAL_MEM | KERNEL_ARG_RESTRICT));
+  args.push_back(this->program_->template create_kernel_arg<uint_tp>("threshold",
+               KERNEL_ARG_CONST));
+  args.push_back(this->program_->template create_kernel_arg<MItype>("scale",
+               KERNEL_ARG_CONST));
+
+  KernelHints hints;
+  hints.push_back(this->program_->create_kernel_hint(
+                                             KERNEL_REQD_WORK_GROUP_X, rtsn));
+  hints.push_back(this->program_->create_kernel_hint(
+                                             KERNEL_REQD_WORK_GROUP_Y, rtsm));
+  hints.push_back(this->program_->create_kernel_hint(
+                                             KERNEL_REQD_WORK_GROUP_Z, 1));
+  hints.push_back(this->program_->create_kernel_hint(
+                                             KERNEL_HINT_MIN_BLOCKS_PER_MP, 2));
+  hints.push_back(this->program_->create_kernel_hint(KERNEL_HINT_VEC_TYPE,
+                             this->program_->template device_type_name<MItype>()
+                             + std::to_string(std::min(vwm, vwn))));
+
+  ss << this->program_->function(name, args, hints);
+
+  // Thread identifiers
+  // Local row ID (max: TSM/WPTM)
+  ss << "const int_tp tidn = " << this->program_->local_id(0) << ";"
+     << std::endl;
+  // Local col ID (max: TSN/WPTN)
+  ss << "const int_tp tidm = " << this->program_->local_id(1) << ";"
+     << std::endl;
+  // Work-group offset
+  ss << "const int_tp offN = TSN * " << this->program_->group_id(0) << ";"
+     << std::endl;
+  // Work-group offset
+  ss << "const int_tp offM = TSM * " << this->program_->group_id(1) << ";"
+     << std::endl;
+
+  // Local tile memory
+  // Asub for loading weights & shuffling the output
+  ss << this->program_->local_mem("MItype", "Asub["
+                       + std::to_string(tsm) + "][" + std::to_string(tsk)
+                       + " + v_pad_A]") << ";" << std::endl;
+  // Bsub for loading the input image and shuffling the output image
+  ss << this->program_->local_mem("MItype", "Bsub["
+                       + std::to_string(tsk) + "][" + std::to_string(tsn)
+                       + " + v_pad_B]") << ";" << std::endl;
+
+  // Batch and group
+  if (group_ > 1) {
+    ss << "int_tp group = " << this->program_->global_id(2) << " % v_g;"
+       << std::endl;
+    ss << "int_tp batch = " << this->program_->global_id(2) << " / v_g;"
+       << std::endl;
+  } else {
+    ss << "int_tp batch = " << this->program_->global_id(2) << ";" << std::endl;
+  }
+
+  if (group_ > 1) {
+    ss << this->program_->global_ptr("const MItype", "Aptr")
+       << " = wg + group * (v_A_off / (v_g * v_g));" << std::endl;
+    ss << this->program_->global_ptr("const MItype", "Bptr")
+       << " = im_out + v_B_off * batch + group * (v_B_off / v_g);" << std::endl;
+    ss << this->program_->global_ptr("MItype", "Cptr")
+       << "= im_in + v_C_off * batch + group * (v_C_off / v_g);" << std::endl;
+  } else {
+    ss << this->program_->global_ptr("const MItype", "Aptr")
+       << " = wg;" << std::endl;
+    ss << this->program_->global_ptr("const MItype", "Bptr")
+       << " = im_out + v_B_off * batch;" << std::endl;
+    ss << this->program_->global_ptr("MItype", "Cptr")
+       << " = im_in + v_C_off * batch;" << std::endl;
+  }
+
+  // Initialize the accumulation registers
+  ss << "{" << std::endl;  // Scoping for C registers
+  ss << this->generate_accreg_init(bw_tuner_, false, false, false, false);
+
+  ss << "{" << std::endl;  // Scoping for load & compute block
+  // Loop over all tiles
+  ss << "#pragma unroll 1" << std::endl;
+  ss << "for (int_tp t = 0; t < v_num_tiles; ++t) {" << std::endl;
+
+  // Load one tile of A into local memory
+  ss << "{" << std::endl;  // Scoping for loading A
+  ss << "for (int_tp la = 0; la < LPTA; ++la) {" << std::endl;
+  ss << "int_tp tid = tidm * RTSN + tidn;" << std::endl;
+  ss << "int_tp id = la * RTSN * RTSM + tid;" << std::endl;
+  ss << "int_tp row = id / TSK;" << std::endl;
+  ss << "int_tp col = id % TSK;" << std::endl;
+  ss << "int_tp tiledIndex = TSK * t + col;" << std::endl;
+
+  if (bwalgo_ == LIBDNN_CONVOLUTION_BW_ALGO_IM2COL) {
+    // Load weights (wg) into Asub, flip fin/fout and inverse spatially
+    // Compute kidx and midx, the column and row index of the
+    // weights in the original A (weights) matrix
+    ss << "int_tp kidx = (v_ks - 1 - tiledIndex % v_ks) + (offM + row) * v_ks;"
+       << std::endl;
+    ss << "int_tp midx = tiledIndex / v_ks;" << std::endl;
+    // Check range of the spatially flipped, fin/fout inverted weights
+    ss << "if ((offM + row) < M && tiledIndex < K) {" << std::endl;
+    // Access weights with the original (translated) weight indices
+    ss << "Asub[row][col] = Aptr[kidx + (v_fin / v_g * v_ks) * midx];"
+       << std::endl;
+    ss << "} else {" << std::endl;  // M-K-Guard
+    ss << "Asub[row][col] = 0.0;" << std::endl;
+    ss << "}" << std::endl;
+  }
+
+  if (bwalgo_ == LIBDNN_CONVOLUTION_BW_ALGO_COL2IM_ATOMIC) {
+    // Load weights (wg) into Asub, read A transposed
+    ss << "if ((offM + row) < M && tiledIndex < K) {" << std::endl;
+    ss << "Asub[row][col] = Aptr[tiledIndex * M + offM + row];" << std::endl;
+    ss << "} else {" << std::endl;  // M-K-Guard
+    ss << "Asub[row][col] = 0.0;" << std::endl;
+    ss << "}" << std::endl;
+  }
+  ss << "}" << std::endl;
+  ss << "}" << std::endl;  // Scoping for loading A
+
+  // Load one tile of B into local memory
+  ss << "{" << std::endl;  // Scoping for loading B
+  ss << "#pragma unroll 4" << std::endl;
+  ss << "for (int_tp lb = 0; lb < LPTB; ++lb) {" << std::endl;
+  ss << "int_tp tid = tidm * RTSN + tidn;" << std::endl;
+  ss << "int_tp id = lb * RTSN * RTSM + tid;" << std::endl;
+  ss << "int_tp col = id % TSN;" << std::endl;
+  ss << "int_tp row = id / TSN;" << std::endl;
+  ss << "int_tp tiledIndex = TSK * t + row;" << std::endl;
+
+  ss << "if ((offN + col) < N && tiledIndex < K) {" << std::endl;
+
+  if (bwalgo_ == LIBDNN_CONVOLUTION_BW_ALGO_IM2COL) {
+    // Load from B with im2col transformation
+
+    // Define temporary registers
+    for (int_tp i = 0; i < num_axes_; ++i) {
+      ss << "int_tp d_iter_" << i << ";" << std::endl;
+      ss << "int_tp d_temp_" << i << ";" << std::endl;
+    }
+
+    // Compute in-range
+    ss << "bool in_range = true;" << std::endl;
+
+    ss << "int_tp imageIndex = offN + col;" << std::endl;
+    for (int_tp i = num_axes_ - 1; i >= 0; --i) {
+      // Compute d_iter, final tiledIndex becomes input feature map ID
+      // Scale d_iter by the dilation factor
+      ss << "d_iter_" << i << " = (tiledIndex % v_k_" << i << ") * v_d_" << i
+         << ";" << std::endl;
+      ss << "tiledIndex = tiledIndex / v_k_" << i << ";" << std::endl;
+
+      // Compute d_temp
+      // Subtract the padding from d_temp, note v_p_i can be negative
+      ss << "d_temp_" << i << " = (imageIndex % v_imsi_" << i << ")"
+         << " - v_p_" << i << ";" << std::endl;
+      ss << "imageIndex = imageIndex / v_imsi_" << i << ";" << std::endl;
+    }
+
+    ss << "int_tp d_iter_im;" << std::endl;
+    for (int_tp i = 0; i < num_axes_; ++i) {
+      // Here, d_temp_ represents the column shift,
+      // while d_iter_ is the kernel shift
+      ss << "d_iter_im = d_temp_" << i << " + d_iter_" << i << ";" << std::endl;
+      ss << "tiledIndex = tiledIndex * v_imso_" << i << " + d_iter_im / v_s_"
+         << i << ";" << std::endl;
+      // In range: Not before or after actual image data
+      // and not between image strides
+      ss << "in_range &= d_iter_im >= 0 && d_iter_im < v_imso_" << i
+         << " * v_s_" << i << " && d_iter_im % v_s_" << i << " == 0;"
+         << std::endl;
+    }
+
+    ss << "if (in_range) {" << std::endl;
+    // tiledIndex now holds the memory offset for the input image
+    ss << "Bsub[row][col] = Bptr[tiledIndex];" << std::endl;
+    ss << "} else {" << std::endl;
+    // Out of B's image dimensions
+    ss << "Bsub[row][col] = 0.0;" << std::endl;
+    ss << "}" << std::endl;
+  }
+
+  if (bwalgo_ == LIBDNN_CONVOLUTION_BW_ALGO_COL2IM_ATOMIC) {
+    // Load from B without transformation
+    ss << "Bsub[row][col] = Bptr[(offN + col) + tiledIndex * N];" << std::endl;
+  }
+
+  ss << "} else {" << std::endl;
+  // Out of B's matrix dimensions
+  ss << "Bsub[row][col] = 0.0;" << std::endl;
+  ss << "}" << std::endl;
+  ss << "}" << std::endl;
+  ss << "}" << std::endl;  // Scoping for loading B
+
+  // Synchronize to make sure the tile is loaded
+  // The gemm core is below
+  ss << this->program_->local_barrier() << std::endl;
+  ss << "#pragma unroll" << std::endl;
+  ss << "for (int_tp wm = 0; wm < WPTM; ++wm) {" << std::endl;
+  ss << "int_tp row = tidm + wm * RTSM;" << std::endl;
+  ss << "int_tp globalRow = row + offM;" << std::endl;
+  ss << "#pragma unroll" << std::endl;
+  ss << "for (int_tp wn = 0; wn < WPTN; ++wn) {" << std::endl;
+  ss << "int_tp col = tidn + wn * RTSN;" << std::endl;
+  ss << "int_tp globalCol = col + offN;" << std::endl;
+  ss << "if (mask[globalRow * N + globalCol] > threshold){" << std::endl;
+  ss << "#pragma unroll" << std::endl;
+  ss << "for (int_tp k = 0; k < TSK; ++k) {" << std::endl;
+  ss << "((MItype*)(&(Creg[wm][wn/VWN])))[wn % VWN] += (Acctype)((Asub[row][k] * Bsub[k][col]));" << std::endl;
+  ss << "}" << std::endl;
+  ss << "}" << std::endl;
+  ss << "}" << std::endl;
+
+  // Synchronize before loading the next tile
+  ss << this->program_->local_barrier() << std::endl;
+
+  // Loop over all tiles
+  ss << "}" << std::endl;
+  ss << "}" << std::endl;  // Scoping for load & compute block
+
+  // Store the final results in C
+  ss << "#pragma unroll" << std::endl;
+  ss << "for (int_tp wm=0; wm<WPTM; ++wm) {" << std::endl;
+  ss << "int_tp globalRow = offM + tidm + wm * RTSM;" <<std::endl;
+  ss << "#pragma unroll" << std::endl;
+  ss << "for (int_tp wn=0; wn<WPTN; ++wn) {" << std::endl;
+  ss << "int_tp globalCol = offN + tidn + wn * RTSN;" << std::endl;
+
+  if (bwalgo_ == LIBDNN_CONVOLUTION_BW_ALGO_IM2COL) {
+    ss << "if (globalRow < M && globalCol < N) {" << std::endl;
+    ss << "Cptr[globalRow * N + globalCol] = ";
+    ss << "((MItype*)(&(Creg[wm][wn/VWN])))[wn % VWN] * scale;" << std::endl;
+    ss << "}" << std::endl;
+  }
+
+  if (bwalgo_ == LIBDNN_CONVOLUTION_BW_ALGO_COL2IM_ATOMIC) {
+    // Define temporary registers
+    for (int_tp i = 0; i < num_axes_; ++i) {
+      ss << "int_tp d_iter_" << i << ";" << std::endl;
+      ss << "int_tp d_temp_" << i << ";" << std::endl;
+    }
+
+    // Compute in-range
+    ss << "bool in_range = true;" << std::endl;
+    ss << "int_tp tiledIndex = globalRow;" << std::endl;
+    ss << "int_tp imageIndex = globalCol;" << std::endl;
+    for (int_tp i = num_axes_ - 1; i >= 0; --i) {
+      // Compute d_iter, final tiledIndex becomes input feature map ID
+      // Scale d_iter by the dilation factor
+      ss << "d_iter_" << i << " = (tiledIndex % v_k_" << i << ") * v_d_" << i
+         << ";" << std::endl;
+      ss << "tiledIndex = tiledIndex / v_k_" << i << ";" << std::endl;
+
+      // Compute d_temp
+      // Scale d_temp by the stride
+      ss << "d_temp_" << i << " = (imageIndex % v_imso_" << i << ") * v_s_" << i
+         << ";" << std::endl;
+      ss << "imageIndex = imageIndex / v_imso_" << i << ";" << std::endl;
+    }
+
+    ss << "in_range &= tiledIndex < v_fin && globalRow < M && globalCol < N;"
+       << std::endl;
+    ss << "int_tp d_iter_im;" << std::endl;
+    for (int_tp i = 0; i < num_axes_; ++i) {
+      // Here, d_temp_ represents the column shift,
+      // while d_iter_ is the kernel shift
+      // d_iter_im is the combined offset in the current dimension i
+      ss << "d_iter_im = d_temp_" << i << " + d_iter_" << i << " - v_p_" << i
+         << ";" << std::endl;
+      ss << "tiledIndex = tiledIndex * v_imsi_" << i << " + d_iter_im;"
+         << std::endl;
+      // In range: Not before or after actual image data
+      ss << "in_range &= d_iter_im >= 0 && d_iter_im < v_imsi_" << i << ";"
+         << std::endl;
+    }
+
+    ss << "if (in_range) {" << std::endl;
+    ss << this->program_->template atomic_add<MItype>("&(Cptr[tiledIndex])",
+                     "((MItype*)(&(Creg[wm][wn/VWN])))[wn % VWN] * scale") << std::endl;
+    ss << "}" << std::endl;
+  }
+
+  ss << "}" << std::endl;
+  ss << "}" << std::endl;
+  ss << "}" << std::endl;   // Scoping for C registers
+
+  // Kernel
+  ss << "}" << std::endl;
+
+  return ss.str();
+}
+
+
+template<typename MItype, typename MOtype>
 void LibDNNConv<MItype, MOtype>::GenerateKernels() {
   this->program_ = this->dev_ptr_->CreateProgram();
 
@@ -1792,6 +2106,8 @@ void LibDNNConv<MItype, MOtype>::GenerateKernels() {
   if (is_float_type<MItype>()) {
     ss << generate_bw_defs();
     ss << generate_bw_kernels("conv_backward");
+    ss << generate_bw_defs();
+    ss << generate_bw_kernels("dropout_conv_backward");
     ss << generate_wg_defs();
     ss << generate_wg_kernels("conv_weights");
   }
@@ -1990,6 +2306,90 @@ void LibDNNConv<MItype, MOtype>::Backward(bool prop_down_data,
     kernel->Execute(group, local);
   }
 }
+
+template<typename MItype, typename MOtype>
+void LibDNNConv<MItype, MOtype>::BackwardDropout(bool prop_down_data,
+                       bool prop_down_weights,
+                       vptr<const MOtype> top_data, vptr<const MOtype> top_diff,
+                       vptr<const MItype> weight, vptr<MItype> weight_diff,
+                       MItype bias_mult,
+                       vptr<const MItype> bias, vptr<MItype> bias_diff,
+                       vptr<const MItype> bottom_data, vptr<MItype> bottom_diff,
+                       int_tp batch_size,
+                       vptr<const uint_tp> mask, const uint_tp uint_thres, const float scale) {
+  int bw_wptn = bw_tuner_->get_param<int>("WPTN");
+  int bw_wptm = bw_tuner_->get_param<int>("WPTM");
+  int bw_wgs0 = bw_tuner_->get_param<int>("workgroup_size_0");
+  int bw_wgs1 = bw_tuner_->get_param<int>("workgroup_size_1");
+  int bw_div_N = bw_wptn * bw_wgs0;
+  int bw_div_M = bw_wptm * bw_wgs1;
+
+  int wg_wptn = wg_tuner_->get_param<int>("WPTN");
+  int wg_wptm = wg_tuner_->get_param<int>("WPTM");
+  int wg_wgs0 = wg_tuner_->get_param<int>("workgroup_size_0");
+  int wg_wgs1 = wg_tuner_->get_param<int>("workgroup_size_1");
+  int wg_div_N = wg_wptn * wg_wgs0;
+  int wg_div_M = wg_wptm * wg_wgs1;
+
+  if (prop_down_data && bwalgo_ == LIBDNN_CONVOLUTION_BW_ALGO_COL2IM_ATOMIC) {
+    int_tp ims = batch_size * fmaps_in_;
+    for (int_tp i = 0; i < im_in_shape_.size(); ++i) {
+      ims *= im_in_shape_[i];
+    }
+    this->dev_ptr_->template set<MItype>(ims, (MItype)0, bottom_diff);
+  }
+
+  // Backprop w.r.t. data
+  if (prop_down_data) {
+    shared_ptr<DeviceKernel> kernel =
+        this->program_->GetKernel("conv_backward");
+    vector<size_t> group = {static_cast<size_t>((this->N_BW_ - 1) / bw_div_N + 1),
+                            static_cast<size_t>((this->M_BW_ - 1) / bw_div_M + 1),
+                            static_cast<size_t>(batch_size * group_)};
+    vector<size_t> local = {static_cast<size_t>(bw_wgs0),
+                            static_cast<size_t>(bw_wgs1), 1};
+
+    kernel->add_arg(&top_diff);
+    kernel->add_arg(&weight);
+    if (bias_term_) {
+      kernel->add_arg(&bias);
+    }
+    kernel->add_arg(&bottom_diff);
+    kernel->add_arg(&mask); 
+    kernel->add_arg(&uint_thres); 
+    kernel->add_arg(&scale); 
+    kernel->Execute(group, local);
+  }
+
+  // Backprop w.r.t. weights and bias
+  if (prop_down_weights && (this->weights_backward_ || this->bias_backward_)) {
+    shared_ptr<DeviceKernel> kernel =
+        this->program_->GetKernel("conv_weights");
+    vector<size_t> group = {static_cast<size_t>(
+                              ((this->N_WG_ - 1) / wg_div_N + 1)),
+                            static_cast<size_t>(
+                              ((this->M_WG_ - 1) / wg_div_M + 1)),
+                            0};
+    vector<size_t> local = {static_cast<size_t>(wg_wgs0),
+                            static_cast<size_t>(wg_wgs1), 1};
+    if (wgalgo_ == LIBDNN_CONVOLUTION_WG_ALGO_DIRECT) {
+      group[2] = group_;
+    }
+    if (wgalgo_ == LIBDNN_CONVOLUTION_WG_ALGO_ATOMIC) {
+      group[2] = batch_size * group_;
+    }
+    kernel->add_arg(&bottom_data);
+    kernel->add_arg(&top_diff);
+    if (bias_term_) {
+      kernel->add_arg(&bias_mult);
+      kernel->add_arg(&bias_diff);
+    }
+    kernel->add_arg(&weight_diff);
+    kernel->add_arg(&batch_size);
+    kernel->Execute(group, local);
+  }
+}
+
 
 template<typename MItype, typename MOtype>
 void LibDNNConv<MItype, MOtype>::Tune(

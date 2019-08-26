@@ -89,6 +89,14 @@ class LibDNNConv : public LibDNN<MItype, MOtype> {
                 vptr<MItype> bias_diff, vptr<const MItype> bottom_data,
                 vptr<MItype> bottom_diff, int_tp batch_size);
 
+  void BackwardDropout(bool prop_down_data, bool prop_down_weights,
+                       vptr<const MOtype> top_data, vptr<const MOtype> top_diff,
+                       vptr<const MItype> weight, vptr<MItype> weight_diff,
+                       const MItype bias_mult, vptr<const MItype> bias,
+                       vptr<MItype> bias_diff, vptr<const MItype> bottom_data,
+                       vptr<MItype> bottom_diff, int_tp batch_size,
+                       vptr<const uint_tp> mask, const uint_tp uint_thres, const float scale);
+
   void Tune(vptr<MOtype> top_data, vptr<MOtype> top_diff,
             vptr<MItype> weight, vptr<MItype> weight_diff,
             const MItype bias_mult, vptr<MItype> bias, vptr<MItype> bias_diff,
@@ -108,6 +116,7 @@ class LibDNNConv : public LibDNN<MItype, MOtype> {
   string generate_wg_defs();
   string generate_fw_kernels(string name);
   string generate_bw_kernels(string name);
+  string generate_bw_dropout_kernels(string name);
   string generate_wg_kernels(string name);
 
   // Autotuners
