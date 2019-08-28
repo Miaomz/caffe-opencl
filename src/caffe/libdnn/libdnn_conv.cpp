@@ -1849,6 +1849,9 @@ string LibDNNConv<MItype, MOtype>::generate_bw_dropout_kernels(string name) {
 
   // Initialize the accumulation registers
   ss << "{" << std::endl;  // Scoping for C registers
+  // Billy: the variables for TDR
+  ss << "int_tp assignedLocalIds[WPTM][WPTN];" << std::endl;
+  ss << "uint8_t maskSub[WPTM][WPTN];" << std::endl;
   ss << this->generate_accreg_init(bw_tuner_, false, false, false, false);
 
   ss << "{" << std::endl;  // Scoping for load & compute block
@@ -1967,29 +1970,77 @@ string LibDNNConv<MItype, MOtype>::generate_bw_dropout_kernels(string name) {
   ss << "}" << std::endl;
   ss << "}" << std::endl;  // Scoping for loading B
 
-  // Synchronize to make sure the tile is loaded
-  // The gemm core is below
+  ss << "if (t == 0){" << std::endl;
+  ss << "__local int_tp idpool[RTSN * RTSM];" << std::endl;
+  ss << "__local int_tp head;" << std::endl;
+  ss << "__local int_tp tail;" << std::endl;
+  // Prepare local id and pointers before the exchange
+  ss << "#pragma unroll" << std::endl;
+  ss << "for (int_tp wm = 0; wm < WPTM; ++wm) {" << std::endl;
+  ss << "#pragma unroll" << std::endl;
+  ss << "for (int_tp wn = 0; wn < WPTN; ++wn) {" << std::endl;
+  ss << "int_tp localId = tidm * RTSN + tidn;" << std::endl; // resumes to the native id
+  ss << "if (localId == (int_tp)0){" << std::endl;
+  ss << "head = 0;" << std::endl;
+  ss << "tail = RTSN * RTSM - 1;" << std::endl;
+  ss << "}" << std::endl;
   ss << this->program_->local_barrier() << std::endl;
+  ss << "int_tp globalRow = offM + tidm + wm * RTSM;" << std::endl;
+  ss << "int_tp globalCol = offN + tidn + wn * RTSN;" << std::endl;
+  ss << "int_tp newId;" << std::endl;
+  ss << "int_tp slot;" << std::endl;
+  ss << "if (mask[globalRow * N + globalCol]){" << std::endl;
+  ss << "newId = localId;" << std::endl;
+  ss << "slot = atomic_add(&head, 1);" << std::endl;
+  ss << "} " << std::endl;
+  ss << "else {" << std::endl;
+  ss << "newId = localId - RTSM * RTSN;" << std::endl;
+  ss << "slot = atomic_sub(&tail, 1);" << std::endl;
+  ss << "}" << std::endl;
+  ss << "idpool[slot] = newId;" << std::endl;
+  ss << this->program_->local_barrier() << std::endl;
+  ss << "localId = idpool[localId];" << std::endl;
+  ss << "if (localId >= 0 && localId < RTSN * RTSM){" << std::endl;
+  ss << "int_tp col = localId % RTSN + wn * RTSN;" << std::endl;
+  ss << "int_tp row = localId / RTSN + wm * RTSM;" << std::endl;
+  ss << "#pragma unroll 8" << std::endl;
+  ss << "for (int_tp k = 0; k < TSK; ++k){" << std::endl;
+  ss << "Creg[wm][wn] += (Acctype)(Asub[row][k] * Bsub[k][col]);" << std::endl;
+  ss << "}" << std::endl;
+  ss << "maskSub[wm][wn] = (uint8_t)1;" << std::endl;
+  ss << "}" << std::endl;
+  ss << "else {" << std::endl;
+  ss << "localId += RTSM * RTSN;" << std::endl;
+  ss << "maskSub[wm][wn] = (uint8_t)0;" << std::endl;
+  ss << "}" << std::endl;
+  ss << "assignedLocalIds[wm][wn] = localId;" << std::endl;
+  ss << "}" << std::endl;
+  ss << "}" << std::endl;
+  ss << this->program_->local_barrier() << std::endl;
+  ss << "}" << std::endl;
+  ss << "else {" << std::endl;
+  // Synchronize to make sure the tile is loaded
+  ss << this->program_->local_barrier() << std::endl;
+  // The gemm core is below
   ss << "#pragma unroll" << std::endl;
   ss << "for (int_tp wm = 0; wm < WPTM; ++wm) {" << std::endl;
   ss << "int_tp row = tidm + wm * RTSM;" << std::endl;
-  ss << "int_tp globalRow = row + offM;" << std::endl;
   ss << "#pragma unroll" << std::endl;
   ss << "for (int_tp wn = 0; wn < WPTN; ++wn) {" << std::endl;
   ss << "int_tp col = tidn + wn * RTSN;" << std::endl;
-  ss << "int_tp globalCol = col + offN;" << std::endl;
-  ss << "if (mask[globalRow * N + globalCol] > threshold){" << std::endl;
+  ss << "if (maskSub[wm][wn]){" << std::endl;
   ss << "#pragma unroll" << std::endl;
   ss << "for (int_tp k = 0; k < TSK; ++k) {" << std::endl;
   ss << "((MItype*)(&(Creg[wm][wn/VWN])))[wn % VWN] += (Acctype)((Asub[row][k] * Bsub[k][col]));" << std::endl;
   ss << "}" << std::endl;
   ss << "}" << std::endl;
   ss << "}" << std::endl;
-
+  ss << "}" << std::endl;
   // Synchronize before loading the next tile
   ss << this->program_->local_barrier() << std::endl;
 
   // Loop over all tiles
+  ss << "}" << std::endl;
   ss << "}" << std::endl;
   ss << "}" << std::endl;  // Scoping for load & compute block
 
@@ -2061,7 +2112,6 @@ string LibDNNConv<MItype, MOtype>::generate_bw_dropout_kernels(string name) {
 
   // Kernel
   ss << "}" << std::endl;
-
   return ss.str();
 }
 
@@ -2106,8 +2156,7 @@ void LibDNNConv<MItype, MOtype>::GenerateKernels() {
   if (is_float_type<MItype>()) {
     ss << generate_bw_defs();
     ss << generate_bw_kernels("conv_backward");
-    ss << generate_bw_defs();
-    ss << generate_bw_kernels("dropout_conv_backward");
+    ss << generate_bw_dropout_kernels("dropout_conv_backward");
     ss << generate_wg_defs();
     ss << generate_wg_kernels("conv_weights");
   }
@@ -2342,7 +2391,7 @@ void LibDNNConv<MItype, MOtype>::BackwardDropout(bool prop_down_data,
   // Backprop w.r.t. data
   if (prop_down_data) {
     shared_ptr<DeviceKernel> kernel =
-        this->program_->GetKernel("conv_backward");
+        this->program_->GetKernel("dropout_conv_backward");
     vector<size_t> group = {static_cast<size_t>((this->N_BW_ - 1) / bw_div_N + 1),
                             static_cast<size_t>((this->M_BW_ - 1) / bw_div_M + 1),
                             static_cast<size_t>(batch_size * group_)};
